@@ -439,6 +439,7 @@ function applyParsed(r) {
   const tm = ($('rawText').textContent.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/) || [])[1];
   if (tm != null && !$('fMeal').value) {
     const hr = Number(tm);
+    if (hr >= 5 && hr < 11) $('fMeal').value = 'Frühstück';
     if (hr >= 11 && hr < 16) $('fMeal').value = 'Mittagessen';
     else if (hr >= 17) $('fMeal').value = 'Abendessen';
   }
