@@ -1,0 +1,20 @@
+{
+  "name": "bewirtungskosten",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "node test/receipt.test.mjs",
+    "start": "python3 -m http.server 8000"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@tesseract.js-data/deu": "^1.0.0",
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.1",
+    "tesseract.js-core": "^5.1.1"
+  },
+  "type": "module",
+  "private": true
+}
