@@ -137,7 +137,13 @@ async function build(d) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); muted();
     const sub = doc.splitTextToSize('Kürzung der Verpflegungspauschale bei Gestellung einer Mahlzeit während einer Dienstreise (§ 9 Abs. 4a Satz 8 EStG). Gehört zur Bewirtungskosten-Abrechnung vom ' + (d.date || '') + '.', R - M);
     doc.text(sub, M, y); y += sub.length * 3.6 + 1;
-    line(y, 0.6, 0); y += 6;
+    line(y, 0.6, 0); y += 3;
+    // Hinweis: nur intern
+    doc.setFillColor(255, 244, 224); doc.setDrawColor(161, 92, 0); doc.setLineWidth(0.3);
+    doc.rect(M, y, R - M, 8, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(161, 92, 0);
+    doc.text('Nur zur Information und internen Verwendung', W / 2, y + 5.3, { align: 'center' });
+    y += 14; ink(); doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     fact('Reisetag', [d.dateLong || d.date || '']);
     fact('Ort der Mahlzeit', [p.name, [p.zip, p.city].filter(Boolean).join(' ') + (v.countryFull ? ', ' + v.countryFull : '')].filter((x) => x && x.trim()), true);
