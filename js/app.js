@@ -435,6 +435,13 @@ async function runOcr() {
 function applyParsed(r) {
   const found = [];
   if (r.date) { $('fDate').value = r.date; found.push('Datum'); }
+  // Mahlzeit aus der Uhrzeit auf dem Beleg ableiten (nur wenn noch nichts gewählt)
+  const tm = ($('rawText').textContent.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/) || [])[1];
+  if (tm != null && !$('fMeal').value) {
+    const hr = Number(tm);
+    if (hr >= 11 && hr < 16) $('fMeal').value = 'Mittagessen';
+    else if (hr >= 17) $('fMeal').value = 'Abendessen';
+  }
   const setAmt = (id, v) => { $(id).value = v ? num2.format(v) : ''; };
   if (r.gross[19] || r.gross[7] || r.gross[0]) {
     setAmt('a19', r.gross[19]); setAmt('a7', r.gross[7]); setAmt('a0', r.gross[0]);
@@ -515,7 +522,7 @@ function buildPrint() {
       <div class="p-law">Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)</div></div>
     </header>
     <table class="p-facts">
-      <tr><th>Tag der Bewirtung</th><td>${esc(deDateLong($('fDate').value)) || '&nbsp;'}</td></tr>
+      <tr><th>Tag der Bewirtung</th><td>${esc([deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – ')) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
       <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${form.guests.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
@@ -571,7 +578,7 @@ function pdfData() {
   return {
     company: store.settings.company, companyLines: companyLines(), logo: store.settings.logo,
     date: deDate($('fDate').value),
-    dateLong: deDateLong($('fDate').value),
+    dateLong: [deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – '),
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
@@ -645,7 +652,7 @@ let sig;
 function resetForm() {
   form = freshForm();
   for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
-  $('fPlaceType').value = 'Restaurant'; $('fCountry').value = 'DE'; $('fOccasion').value = '';
+  $('fPlaceType').value = 'Restaurant'; $('fMeal').value = ''; $('fCountry').value = 'DE'; $('fOccasion').value = '';
   $('fSignPlace').value = ''; $('fSignDate').value = todayIso();
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
   $('fileInput').value = '';
@@ -839,7 +846,7 @@ function bind() {
 }
 
 // ---------- Abrechnungen speichern (IndexedDB) ----------
-const FIELD_IDS = ['fDate', 'fPlaceType', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'fHost', 'fOccasion', 'fOccasionNote',
+const FIELD_IDS = ['fDate', 'fPlaceType', 'fMeal', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'fHost', 'fOccasion', 'fOccasionNote',
   'a19', 'a7', 'a0', 'aTip', 'aFee', 'fSignPlace', 'fSignDate'];
 const CHECK_IDS = ['fHostAttends', 'fFeeFull'];
 const CUR_KEY = 'bewirtung.currentReport';
@@ -991,7 +998,7 @@ function stepState() {
   const occ = $('fOccasion').value;
   return {
     1: { done: form.pages.length > 0, sum: form.pages.length ? `${form.pages.length} Seite${form.pages.length === 1 ? '' : 'n'}` : 'Foto oder PDF hinzufügen' },
-    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
+    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
     3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} Gast${form.guests.length === 1 ? '' : 'e'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
     4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },
     5: { done: !!form.signature, sum: form.signature ? `unterschrieben${$('fSignPlace').value ? ', ' + $('fSignPlace').value : ''}` : 'optional, sonst von Hand' },
