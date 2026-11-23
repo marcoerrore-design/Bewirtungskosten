@@ -44,11 +44,16 @@ function freshForm() {
 }
 
 // ---------- Dialog ----------
-function ask(title, fields, okLabel = 'Speichern') {
+// Eigene Dialoge statt alert/confirm: die sind in eingebetteten Vorschauen gesperrt.
+function confirmDlg(title, text, okLabel = 'OK') {
+  return ask(title, [], okLabel, `<p class="dlg-text">${esc(text)}</p>`).then((v) => v !== null);
+}
+function ask(title, fields, okLabel = 'Speichern', html = '') {
   const dlg = $('dlg');
   $('dlgTitle').textContent = title;
   $('dlgOk').textContent = okLabel;
-  $('dlgBody').innerHTML = fields.map((f, i) => f.options
+  $('dlgOk').hidden = !okLabel;
+  $('dlgBody').innerHTML = html + fields.map((f, i) => f.options
     ? `<label>${esc(f.label)}<select data-i="${i}">${f.options.map((o) => `<option value="${esc(o.value ?? o)}" ${(o.value ?? o) === f.value ? 'selected' : ''}>${esc(o.label ?? o)}</option>`).join('')}</select></label>`
     : `<label>${esc(f.label)}<input data-i="${i}" value="${esc(f.value || '')}" ${f.required ? 'required' : ''} autocomplete="off"></label>`).join('');
   dlg.showModal();
@@ -127,9 +132,9 @@ async function editLocation(id) {
   updateLocState();
   alertStatus(`✓ „${p.name}“ gespeichert`);
 }
-function deleteLocation(id) {
+async function deleteLocation(id) {
   const p = store.places.find((x) => x.id === id);
-  if (!p || !window.confirm(`Location „${p.name}“ aus der Liste löschen?`)) return;
+  if (!p || !(await confirmDlg('Location löschen', `„${p.name}“ aus der Liste löschen?`, 'Löschen'))) return;
   store.places = store.places.filter((x) => x.id !== id);
   if (form.locationId === id) form.locationId = null;
   save(); renderStamm(); if (locOpen) renderLocList(); updateLocState();
@@ -197,7 +202,7 @@ async function onZipInput() {
     const cities = await lookup(country, zip);
     if (normalizeZip(country, $('fZip').value) !== normalizeZip(country, zip)) return; // veraltet
     $('cityList').innerHTML = cities.map((c) => `<option value="${esc(c)}">`).join('');
-    if (!cities.length) { $('plzStatus').textContent = 'PLZ nicht gefunden – Ort bitte von Hand eintragen.'; return; }
+    if (!cities.length) { $('plzStatus').textContent = window.Plz.offline() ? 'PLZ-Suche hier nicht erreichbar – Ort bitte von Hand eintragen.' : 'PLZ nicht gefunden – Ort bitte von Hand eintragen.'; return; }
     if (form.autoCity || !$('fCity').value.trim()) { $('fCity').value = cities[0]; form.autoCity = true; }
     $('plzStatus').textContent = cities.length > 1 ? `${cities.length} Orte zu dieser PLZ – Auswahl im Feld „Ort“.` : `✓ ${cities[0]}`;
   }, 250);
@@ -526,18 +531,21 @@ function buildPrint() {
   $('print').innerHTML = pages;
   return missing;
 }
+const PAGES_URL = 'https://marcoerrore-design.github.io/Bewirtungskosten/';
+const inPreview = (() => { try { return window.self !== window.top; } catch { return true; } })();
 async function doPrint() {
   const missing = buildPrint();
-  if (missing.length && !confirmMissing(missing)) return;
+  if (inPreview) {
+    await ask('Drucken in der Vorschau nicht möglich', [], '', `<p class="dlg-text">Diese Vorschau darf keinen Druckdialog öffnen. Zum Drucken oder Speichern als PDF bitte die Online-Version öffnen:</p><p><a href="${PAGES_URL}" target="_blank" rel="noopener">${PAGES_URL}</a></p>`);
+    return;
+  }
+  if (missing.length && !(await confirmDlg('Angaben fehlen', `Es fehlen noch: ${missing.join(', ')}. Trotzdem drucken?`, 'Trotzdem drucken'))) return;
   await Promise.all([...$('print').querySelectorAll('img')].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
   const prevTitle = document.title;
   const p = placeFromFields();
   document.title = `Bewirtung ${$('fDate').value || ''} ${p.name || ''}`.trim();
   window.print();
   setTimeout(() => { document.title = prevTitle; }, 500);
-}
-function confirmMissing(missing) {
-  return window.confirm(`Es fehlen noch Angaben: ${missing.join(', ')}.\n\nTrotzdem drucken?`);
 }
 
 // ---------- Neu ----------
@@ -670,7 +678,7 @@ function bind() {
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importStore(e.target.files[0]); e.target.value = ''; });
 
   $('btnPrint').onclick = doPrint; $('btnPrint2').onclick = doPrint;
-  $('btnNew').onclick = () => { if (!form.pages.length && !form.guests.length || window.confirm('Aktuelle Abrechnung verwerfen und neu beginnen?')) resetForm(); };
+  $('btnNew').onclick = async () => { if ((!form.pages.length && !form.guests.length) || await confirmDlg('Neue Abrechnung', 'Aktuelle Abrechnung verwerfen und neu beginnen?', 'Neu beginnen')) resetForm(); };
   window.addEventListener('beforeprint', () => { if (!$('print').innerHTML) buildPrint(); });
   window.addEventListener('afterprint', () => { $('print').innerHTML = ''; });
 }

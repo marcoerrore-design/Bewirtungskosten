@@ -48,6 +48,7 @@ function suggestFromCache(country, prefix) {
   return out.sort((a, b) => a.zip.localeCompare(b.zip));
 }
 
+let lastNetworkError = false;
 async function fetchJson(url, ms = 6000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
@@ -55,13 +56,14 @@ async function fetchJson(url, ms = 6000) {
     const r = await fetch(url, { signal: ctrl.signal });
     if (!r.ok) return null;
     return await r.json();
-  } catch { return null; } finally { clearTimeout(t); }
+  } catch { lastNetworkError = true; return null; } finally { clearTimeout(t); }
 }
 
 async function lookup(country, zip) {
   const z = normalizeZip(country, zip);
   const key = `${country}:${z}`;
   if (cache[key]) return cache[key];
+  lastNetworkError = false;
   let cities = [];
   const zp = await fetchJson(`https://api.zippopotam.us/${country.toLowerCase()}/${encodeURIComponent(country === 'SE' ? z.slice(0, 3) + ' ' + z.slice(3) : z)}`)
     || (country === 'SE' ? await fetchJson(`https://api.zippopotam.us/se/${z}`) : null);
@@ -84,5 +86,5 @@ function remember(country, zip, city) {
   if (!list.includes(city)) { cache[key] = [...list, city]; saveCache(); }
 }
 
-root.Plz = { COUNTRIES, lookup, suggestFromCache, isComplete, normalizeZip, remember };
+root.Plz = { offline: () => lastNetworkError, COUNTRIES, lookup, suggestFromCache, isComplete, normalizeZip, remember };
 })(typeof window !== 'undefined' ? window : globalThis);
