@@ -36,7 +36,7 @@ async function build(d) {
     for (const l of d.companyLines || []) { doc.text(l, R, ry, { align: 'right' }); ry += 4; }
   }
   y = Math.max(M, ry + 4);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); ink(); doc.text('Bewirtungskostenbeleg', M, y + 2); y += 8;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); ink(); doc.text('Bewirtungskosten-Abrechnung', M, y + 2); y += 8;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); muted();
   const law = doc.splitTextToSize('Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)', R - M);
   doc.text(law, M, y); y += law.length * 3.6 + 1;
@@ -128,7 +128,7 @@ async function build(d) {
     const fmt = src.startsWith('data:image/png') ? 'PNG' : 'JPEG';
     doc.addImage(src, fmt, M + (maxW - w) / 2, M + 4, w, h, undefined, 'FAST');
   }
-  doc.setProperties({ title: d.fileName.replace(/\.pdf$/, ''), subject: 'Bewirtungskostenbeleg', creator: 'Bewirtungskosten Web-App' });
+  doc.setProperties({ title: d.fileName.replace(/\.pdf$/, ''), subject: 'Bewirtungskosten-Abrechnung', creator: 'Bewirtungskosten-Abrechnung (Web-App)' });
   return doc.output('blob');
 }
 

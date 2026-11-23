@@ -504,7 +504,7 @@ function buildPrint() {
   <section class="p-page">
     <header class="p-head">
       ${store.settings.logo || company ? `<div class="p-firm">${store.settings.logo ? `<img class="p-logo" src="${store.settings.logo}" alt="">` : ''}${company ? `<div class="p-company">${esc(company)}</div>${companyLines().map((l) => `<div class="p-addr">${esc(l)}</div>`).join('')}` : ''}</div>` : ''}
-      <div><h1>Bewirtungskostenbeleg</h1>
+      <div><h1>Bewirtungskosten-Abrechnung</h1>
       <div class="p-law">Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)</div></div>
     </header>
     <table class="p-facts">
@@ -573,7 +573,7 @@ function pdfData() {
     calc: c,
     note: (form.pages.length ? 'Die Rechnung ist als Anlage beigefügt.' : 'Rechnung: bitte beifügen.') + (c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : ''),
     signPlaceDate, signature: form.signature, pages: form.pages,
-    fileName: `Bewirtung_${$('fDate').value || todayIso()}${p.name ? '_' + safe(p.name) : ''}.pdf`,
+    fileName: `Bewirtungskosten-Abrechnung_${$('fDate').value || todayIso()}${p.name ? '_' + safe(p.name) : ''}.pdf`,
   };
 }
 let lastPdf = null;
