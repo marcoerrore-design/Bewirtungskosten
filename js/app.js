@@ -591,7 +591,9 @@ function loadSettings() {
 // ---------- Ereignisse ----------
 function bind() {
   const fi = $('fileInput'), drop = $('drop');
-  fi.addEventListener('change', () => { if (fi.files.length) addFiles([...fi.files]); });
+  fi.addEventListener('change', () => { if (fi.files.length) addFiles([...fi.files]); fi.value = ''; });
+  const cam = $('camInput');
+  cam.addEventListener('change', () => { if (cam.files.length) addFiles([...cam.files]); cam.value = ''; });
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
@@ -695,6 +697,33 @@ $('fSignPlace').value = store.settings.signPlace;
 updateAmounts();
 // Bekannte Orte in den PLZ-Cache übernehmen
 for (const p of store.places) remember(p.country, p.zip, p.city);
+
+// Offline-Fähigkeit und Installation als App (nur über https, nicht per Doppelklick)
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !inPreview) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
+// Hinweis „Zum Home-Bildschirm“ (iPhone/iPad) bzw. Installieren-Knopf (Android/Chrome)
+(function installHint() {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('bewirtung.installHint') === 'off'; } catch {}
+  if (standalone || dismissed || inPreview || location.protocol !== 'https:') return;
+  const bar = $('installBar');
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) {
+    $('installText').innerHTML = 'Als App nutzen: in Safari auf <b>Teilen</b> <span aria-hidden="true">⬆︎</span> tippen, dann <b>„Zum Home-Bildschirm“</b>.';
+    bar.hidden = false;
+  }
+  let deferred;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferred = e;
+    $('installText').textContent = 'Bewirtungskosten als App auf diesem Gerät installieren?';
+    $('btnInstall').hidden = false; bar.hidden = false;
+  });
+  $('btnInstall').onclick = async () => { if (!deferred) return; deferred.prompt(); await deferred.userChoice.catch(() => {}); deferred = null; bar.hidden = true; };
+  $('btnInstallClose').onclick = () => { bar.hidden = true; try { localStorage.setItem('bewirtung.installHint', 'off'); } catch {} };
+})();
 
 // Für Tests
 window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc };

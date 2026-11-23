@@ -9,6 +9,15 @@ Kleine Web-App für Bewirtungskostenbelege nach § 4 Abs. 5 Satz 1 Nr. 2 EStG.
 - Auslandseinsatzentgelt, Vorsteuer, 70/30-Aufteilung, Unterschrift per Finger/Maus.
 - Druckansicht A4 mit Beleg als Anlage; „Als PDF speichern“ im Druckdialog.
 
+## Auf Handy und Tablet
+
+Die App ist eine installierbare Web-App (PWA) für iPhone/iPad (Safari) und Android (Chrome):
+- iPhone/iPad: Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“.
+- Android: Chrome bietet „App installieren“ an (oder Menü → „Zum Startbildschirm hinzufügen“).
+
+Nach dem ersten Öffnen läuft sie auch offline (Service Worker `sw.js`). Bei Änderungen an der App
+in `sw.js` die `VERSION` erhöhen, damit installierte Apps das Update laden.
+
 ## Starten
 
 `index.html` per Doppelklick öffnen. Es wird kein Webserver gebraucht, alle Bibliotheken liegen in `vendor/`.

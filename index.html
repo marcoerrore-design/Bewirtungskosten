@@ -2,8 +2,18 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bewirtungskosten</title>
+<meta name="description" content="Bewirtungskostenbelege nach § 4 Abs. 5 Satz 1 Nr. 2 EStG erfassen">
+<meta name="theme-color" content="#1f4fbf">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bewirtung">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -19,14 +29,25 @@
     </div>
   </header>
 
+  <div class="install" id="installBar" hidden>
+    <span id="installText"></span>
+    <button type="button" class="small primary" id="btnInstall" hidden>Installieren</button>
+    <button type="button" class="small ghost" id="btnInstallClose" aria-label="Hinweis schließen">×</button>
+  </div>
+
   <!-- 1. Beleg -->
   <section class="card" id="secReceipt">
     <h2><span class="num">1</span> Beleg</h2>
-    <label class="drop" id="drop">
-      <input type="file" id="fileInput" accept="image/*,application/pdf" multiple>
-      <span class="drop-main">Foto oder PDF hier ablegen oder <u>auswählen</u></span>
-      <span class="drop-hint">Auf dem Handy öffnet sich die Kamera. Mehrere Seiten möglich.</span>
-    </label>
+    <div class="drop" id="drop">
+      <div class="drop-buttons">
+        <label class="btn-like primary" for="camInput">📷 Beleg fotografieren</label>
+        <label class="btn-like" for="fileInput">Foto oder PDF auswählen</label>
+      </div>
+      <input type="file" id="camInput" accept="image/*" capture="environment" class="vh">
+      <input type="file" id="fileInput" accept="image/*,application/pdf" multiple class="vh">
+      <span class="drop-hint only-desktop">oder Datei hierher ziehen · mehrere Seiten möglich</span>
+      <span class="drop-hint only-touch">Bon flach hinlegen, gut ausleuchten, ganz ins Bild. Mehrere Seiten möglich.</span>
+    </div>
     <div class="thumbs" id="thumbs"></div>
     <div class="ocr-row">
       <button type="button" id="btnOcr" disabled>Beleg auslesen</button>
@@ -135,7 +156,7 @@
       <label>Datum<input type="date" id="fSignDate"></label>
     </div>
     <div class="sig-wrap">
-      <canvas id="sigPad" width="900" height="240" aria-label="Unterschriftenfeld"></canvas>
+      <canvas id="sigPad" width="900" height="300" aria-label="Unterschriftenfeld"></canvas>
       <div class="sig-actions">
         <span class="hint">Mit Finger oder Maus unterschreiben, oder leer lassen und auf dem Ausdruck von Hand unterschreiben.</span>
         <button type="button" class="ghost small" id="btnSigClear">Löschen</button>
