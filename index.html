@@ -43,16 +43,17 @@
     <h2><span class="num">2</span> Tag und Ort der Bewirtung</h2>
     <div class="grid g2">
       <label>Tag der Bewirtung<input type="date" id="fDate" required></label>
-      <label>Gespeicherter Ort
-        <select id="fPlaceSel"><option value="">– neuer Ort –</option></select>
-      </label>
-    </div>
-    <div class="grid g3">
       <label>Art
         <select id="fPlaceType"><option>Restaurant</option><option>Hotel</option><option>Sonstiges</option></select>
       </label>
-      <label class="span2">Name<input id="fPlaceName" autocomplete="off" placeholder="z. B. Ristorante Da Mario"></label>
     </div>
+    <label for="fLocation">Location</label>
+    <div class="locbox" id="locBox">
+      <input id="fLocation" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="locList" placeholder="Location wählen oder neu eintippen">
+      <button type="button" class="loc-toggle" id="btnLocToggle" aria-label="Liste öffnen">▾</button>
+      <ul class="loc-list" id="locList" role="listbox" hidden></ul>
+    </div>
+    <p class="hint loc-state" id="locState"></p>
     <label>Straße, Hausnummer<input id="fStreet" autocomplete="off"></label>
     <div class="grid g3 plz">
       <label>Land
@@ -69,8 +70,8 @@
     </div>
     <div class="row-actions">
       <span class="status" id="plzStatus"></span>
-      <button type="button" class="ghost small" id="btnSavePlace">Ort speichern</button>
-      <button type="button" class="ghost small danger" id="btnDelPlace" hidden>Ort löschen</button>
+      <button type="button" class="ghost small danger" id="btnDelPlace" hidden>Location löschen</button>
+      <button type="button" class="small" id="btnSavePlace">Location speichern</button>
     </div>
   </section>
 
@@ -176,6 +177,8 @@
   </form>
 </dialog>
 
-<script type="module" src="js/app.js"></script>
+<script src="js/receipt.js"></script>
+<script src="js/plz.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

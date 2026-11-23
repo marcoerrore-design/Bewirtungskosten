@@ -1,9 +1,10 @@
 // Heuristisches Auslesen von Kassenbons / Rechnungen (Text aus OCR oder PDF).
 // Alles, was hier erkannt wird, landet nur als Vorschlag im Formular und bleibt änderbar.
-
+(function (root) {
+'use strict';
 const AMOUNT_RE = /(?<![\d,.])-?\d{1,3}(?:[.\s']\d{3})*[,.]\d{2}(?![\d%])/g;
 
-export function parseAmount(s) {
+function parseAmount(s) {
   if (s == null) return NaN;
   let t = String(s).trim().replace(/[€\s']/g, '');
   if (!t) return NaN;
@@ -26,7 +27,7 @@ const near = (a, b, tol = 0.02) => Math.abs(a - b) <= tol;
 const r2 = (n) => Math.round(n * 100) / 100;
 
 // Ermittelt aus den Zahlen einer MwSt-Zeile den Bruttobetrag für den Satz `rate`.
-export function grossFromVatLine(nums, rate, line = '') {
+function grossFromVatLine(nums, rate, line = '') {
   const f = rate / 100;
   const n = nums.filter((x) => x > 0);
   // Tripel Netto + Steuer = Brutto
@@ -75,7 +76,7 @@ const TOTAL_KEYS = [
 const TIP_RE = /trinkgeld|\btip\b|gratuity|\bfooi\b|dricks|drikkepenger|tippi/i;
 const HEADER_WORDS = /^(rechnung|quittung|beleg|bon|kassenbon|bewirtung|kopie|duplikat|willkommen|herzlich|tisch|table|bedienung|kasse)/i;
 
-export function parseDate(text) {
+function parseDate(text) {
   let m = text.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4}|\d{2})\b/);
   if (m) {
     let [, d, mo, y] = m;
@@ -88,7 +89,7 @@ export function parseDate(text) {
   return null;
 }
 
-export function parseReceipt(text) {
+function parseReceipt(text) {
   const lines = String(text || '').split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const res = { date: parseDate(text || ''), total: null, tip: null, gross: { 19: null, 7: null, 0: null }, name: null, street: null, zip: null, city: null };
 
@@ -154,3 +155,6 @@ function tipIncluded(lines) {
   const sumIdx = lines.findIndex((l) => TOTAL_KEYS[0].test(l) || TOTAL_KEYS[1].test(l));
   return tipIdx >= 0 && sumIdx > tipIdx;
 }
+
+root.Receipt = { parseReceipt, parseAmount, parseDate, grossFromVatLine };
+})(typeof window !== 'undefined' ? window : globalThis);

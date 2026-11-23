@@ -1,8 +1,9 @@
 // Postleitzahlen-Suche für DACH, Benelux und Skandinavien.
 // Quelle: zippopotam.us (frei, ohne API-Key, CORS-fähig); für DE/AT/CH/LI zusätzlich openplzapi.org als Rückfallebene.
 // Ergebnisse werden lokal zwischengespeichert, damit bekannte PLZ auch offline sofort gefunden werden.
-
-export const COUNTRIES = [
+(function (root) {
+'use strict';
+const COUNTRIES = [
   { code: 'DE', name: 'Deutschland', len: [5], re: /^\d{5}$/ },
   { code: 'AT', name: 'Österreich', len: [4], re: /^\d{4}$/ },
   { code: 'CH', name: 'Schweiz', len: [4], re: /^\d{4}$/ },
@@ -23,19 +24,19 @@ try { cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { cac
 const saveCache = () => { try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch {} };
 
 // "1012 AB" -> "1012", "114 55" -> "11455"
-export function normalizeZip(country, zip) {
+function normalizeZip(country, zip) {
   let z = String(zip || '').toUpperCase().replace(/^(D|A|CH|NL|DK|S|SE|N|NO|FI|L|B|FL|IS)-/, '');
   if (country === 'NL') z = z.replace(/\s*[A-Z]{2}$/, '');
   return z.replace(/\s+/g, '');
 }
 
-export function isComplete(country, zip) {
+function isComplete(country, zip) {
   const c = COUNTRIES.find((x) => x.code === country);
   return !!c && c.re.test(normalizeZip(country, zip));
 }
 
 // Vorschläge aus dem lokalen Cache für eine angefangene PLZ (z. B. "803" -> 80331 München, 80333 München …)
-export function suggestFromCache(country, prefix) {
+function suggestFromCache(country, prefix) {
   const p = normalizeZip(country, prefix);
   if (!p) return [];
   const out = [];
@@ -57,7 +58,7 @@ async function fetchJson(url, ms = 6000) {
   } catch { return null; } finally { clearTimeout(t); }
 }
 
-export async function lookup(country, zip) {
+async function lookup(country, zip) {
   const z = normalizeZip(country, zip);
   const key = `${country}:${z}`;
   if (cache[key]) return cache[key];
@@ -75,10 +76,13 @@ export async function lookup(country, zip) {
 }
 
 // Bekannte PLZ (z. B. aus gespeicherten Orten) in den Cache übernehmen
-export function remember(country, zip, city) {
+function remember(country, zip, city) {
   const z = normalizeZip(country, zip);
   if (!z || !city) return;
   const key = `${country}:${z}`;
   const list = cache[key] || [];
   if (!list.includes(city)) { cache[key] = [...list, city]; saveCache(); }
 }
+
+root.Plz = { COUNTRIES, lookup, suggestFromCache, isComplete, normalizeZip, remember };
+})(typeof window !== 'undefined' ? window : globalThis);

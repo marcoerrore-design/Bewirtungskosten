@@ -146,3 +146,21 @@ dialog h3 { text-transform: none; letter-spacing: 0; font-size: 16px; color: var
 .p-receipt { text-align: center; }
 .p-receipt-h { font-size: 9pt; color: #444; text-align: left; margin-bottom: 6px; }
 .p-receipt img { max-width: 100%; max-height: 250mm; object-fit: contain; }
+
+/* Location-Dropdown */
+.locbox { position: relative; display: flex; margin-bottom: 4px; }
+.locbox input { margin-top: 0; padding-right: 42px; }
+.loc-toggle { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 40px; padding: 0; border: 0; border-left: 1px solid var(--line); border-radius: 0 7px 7px 0; background: transparent; color: var(--muted); font-size: 14px; }
+.loc-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; max-height: 300px; overflow: auto; margin: 0; padding: 4px; list-style: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+.loc-list li { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 10px; border-radius: 6px; cursor: pointer; }
+.loc-list li.active, .loc-list li:hover { background: var(--accent-soft); }
+.loc-list li.current b::after { content: " ✓"; color: var(--accent); }
+.loc-list li.empty { cursor: default; color: var(--muted); font-size: 13px; background: none; }
+.loc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.loc-main b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loc-main small { color: var(--muted); font-size: 12px; }
+.loc-act { padding: 4px 8px; border: 0; background: transparent; color: var(--muted); font-size: 15px; }
+.loc-act:hover { color: var(--ink); background: var(--bg); }
+.loc-state { min-height: 1em; margin: 0 0 10px; }
+.linkish { padding: 0; border: 0; background: none; color: var(--ink); font-weight: 500; text-align: left; white-space: normal; }
+.linkish:hover { color: var(--accent); }

@@ -1,5 +1,8 @@
-import { parseReceipt, parseAmount } from './receipt.js';
-import { COUNTRIES, lookup, suggestFromCache, isComplete, normalizeZip, remember } from './plz.js';
+// Klassisches Skript (kein ES-Modul), damit die App auch per Doppelklick (file://) läuft.
+(function () {
+'use strict';
+const { parseReceipt, parseAmount } = window.Receipt;
+const { COUNTRIES, lookup, suggestFromCache, isComplete, normalizeZip, remember } = window.Plz;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -37,7 +40,7 @@ const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)
 // ---------- Formularzustand ----------
 let form = freshForm();
 function freshForm() {
-  return { pages: [], pdfText: '', guests: [], ocrTotal: null, signature: null, autoCity: true };
+  return { pages: [], pdfText: '', guests: [], ocrTotal: null, signature: null, autoCity: true, locationId: null };
 }
 
 // ---------- Dialog ----------
@@ -45,14 +48,15 @@ function ask(title, fields, okLabel = 'Speichern') {
   const dlg = $('dlg');
   $('dlgTitle').textContent = title;
   $('dlgOk').textContent = okLabel;
-  $('dlgBody').innerHTML = fields.map((f, i) =>
-    `<label>${esc(f.label)}<input data-i="${i}" value="${esc(f.value || '')}" ${f.required ? 'required' : ''} autocomplete="off"></label>`).join('');
+  $('dlgBody').innerHTML = fields.map((f, i) => f.options
+    ? `<label>${esc(f.label)}<select data-i="${i}">${f.options.map((o) => `<option value="${esc(o.value ?? o)}" ${(o.value ?? o) === f.value ? 'selected' : ''}>${esc(o.label ?? o)}</option>`).join('')}</select></label>`
+    : `<label>${esc(f.label)}<input data-i="${i}" value="${esc(f.value || '')}" ${f.required ? 'required' : ''} autocomplete="off"></label>`).join('');
   dlg.showModal();
   setTimeout(() => dlg.querySelector('input')?.focus(), 30);
   return new Promise((resolve) => {
     dlg.addEventListener('close', () => {
       if (dlg.returnValue !== 'ok') return resolve(null);
-      resolve([...dlg.querySelectorAll('#dlgBody input')].map((x) => x.value.trim()));
+      resolve([...dlg.querySelectorAll('#dlgBody [data-i]')].map((x) => x.value.trim()));
     }, { once: true });
   });
 }
@@ -61,16 +65,75 @@ function ask(title, fields, okLabel = 'Speichern') {
 function renderCountry() {
   $('fCountry').innerHTML = COUNTRIES.map((c) => `<option value="${c.code}">${c.code} – ${esc(c.name)}</option>`).join('');
 }
-function renderPlaces() {
-  const sel = $('fPlaceSel'), cur = sel.value;
+// ---------- Location (bearbeitbares Dropdown) ----------
+const PLACE_TYPES = ['Restaurant', 'Hotel', 'Sonstiges'];
+let locOpen = false, locActive = -1;
+const selectedLocation = () => store.places.find((p) => p.id === form.locationId) || null;
+function locItems() {
+  const q = $('fLocation').value.trim().toLowerCase();
+  const sel = selectedLocation();
   const sorted = [...store.places].sort((a, b) => a.name.localeCompare(b.name, 'de'));
-  sel.innerHTML = '<option value="">– neuer Ort –</option>' +
-    ['Restaurant', 'Hotel', 'Sonstiges'].map((t) => {
-      const items = sorted.filter((p) => (p.type || 'Restaurant') === t);
-      return items.length ? `<optgroup label="${t}">${items.map((p) => `<option value="${p.id}">${esc(p.name)}${p.city ? ' – ' + esc(p.city) : ''}</option>`).join('')}</optgroup>` : '';
-    }).join('');
-  sel.value = store.places.some((p) => p.id === cur) ? cur : '';
-  $('btnDelPlace').hidden = !sel.value;
+  if (!q || (sel && sel.name.toLowerCase() === q)) return sorted;
+  return sorted.filter((p) => `${p.name} ${p.city || ''} ${p.street || ''}`.toLowerCase().includes(q));
+}
+function renderLocList() {
+  const items = locItems();
+  if (locActive >= items.length) locActive = items.length - 1;
+  $('locList').innerHTML = items.length
+    ? items.map((p, i) => `<li role="option" data-id="${p.id}" class="${i === locActive ? 'active' : ''}${p.id === form.locationId ? ' current' : ''}">
+        <span class="loc-main"><b>${esc(p.name)}</b><small>${esc(p.type || 'Restaurant')}${p.city ? ' · ' + esc([p.zip, p.city].filter(Boolean).join(' ')) : ''}</small></span>
+        <button type="button" class="loc-act" data-edit="${p.id}" aria-label="bearbeiten" title="bearbeiten">✎</button>
+        <button type="button" class="loc-act" data-del="${p.id}" aria-label="löschen" title="löschen">×</button></li>`).join('')
+    : `<li class="empty">${store.places.length ? 'Kein Treffer. Adresse ergänzen und mit „Location speichern“ neu anlegen.' : 'Noch keine Locations gespeichert. Namen eintippen, Adresse ergänzen und „Location speichern“ klicken.'}</li>`;
+}
+function openLoc(open) {
+  locOpen = open; locActive = -1;
+  $('locList').hidden = !open;
+  $('fLocation').setAttribute('aria-expanded', String(open));
+  if (open) renderLocList();
+}
+function selectLocation(p) {
+  form.locationId = p.id;
+  fillPlace(p);
+  openLoc(false);
+  updateLocState();
+}
+function updateLocState() {
+  const p = selectedLocation();
+  $('btnDelPlace').hidden = !p;
+  $('btnSavePlace').textContent = p ? 'Änderungen speichern' : 'Location speichern';
+  $('locState').textContent = p
+    ? `Gespeicherte Location (${p.type || 'Restaurant'}).`
+    : ($('fLocation').value.trim() ? 'Neue Location. Mit „Location speichern“ in die Liste aufnehmen.' : '');
+}
+async function editLocation(id) {
+  const p = store.places.find((x) => x.id === id);
+  if (!p) return;
+  openLoc(false);
+  const v = await ask('Location bearbeiten', [
+    { label: 'Name', value: p.name, required: true },
+    { label: 'Art', value: p.type || 'Restaurant', options: PLACE_TYPES },
+    { label: 'Straße, Hausnummer', value: p.street },
+    { label: 'Land', value: p.country || 'DE', options: COUNTRIES.map((c) => ({ value: c.code, label: `${c.code} – ${c.name}` })) },
+    { label: 'PLZ', value: p.zip },
+    { label: 'Ort (leer lassen = automatisch aus PLZ)', value: p.city },
+  ]);
+  if (!v || !v[0]) return;
+  Object.assign(p, { name: v[0], type: v[1], street: v[2], country: v[3], zip: v[4], city: v[5] });
+  if (!p.city && p.zip && isComplete(p.country, p.zip)) p.city = (await lookup(p.country, p.zip))[0] || '';
+  remember(p.country, p.zip, p.city);
+  save(); renderStamm();
+  if (form.locationId === p.id) fillPlace(p);
+  updateLocState();
+  alertStatus(`✓ „${p.name}“ gespeichert`);
+}
+function deleteLocation(id) {
+  const p = store.places.find((x) => x.id === id);
+  if (!p || !window.confirm(`Location „${p.name}“ aus der Liste löschen?`)) return;
+  store.places = store.places.filter((x) => x.id !== id);
+  if (form.locationId === id) form.locationId = null;
+  save(); renderStamm(); if (locOpen) renderLocList(); updateLocState();
+  alertStatus(`„${p.name}“ gelöscht`);
 }
 function renderHosts() {
   const sel = $('fHost'), cur = sel.value || store.settings.lastHostId;
@@ -98,23 +161,23 @@ function renderStamm() {
   const block = (title, kind, items, label) => `
     <div><h3>${title}</h3>${items.length ? `<ul>${items.map((x, i) => `<li><span>${label(x)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">leer</p>'}</div>`;
   $('stammLists').innerHTML =
-    block('Orte', 'places', store.places, (p) => `${esc(p.name)} <small>${esc(p.zip)} ${esc(p.city)}</small>`) +
+    block('Locations', 'places', store.places, (p) => `<button type="button" class="linkish" data-edit="${p.id}" title="bearbeiten">${esc(p.name)} ✎</button> <small>${esc(p.zip)} ${esc(p.city)}</small>`) +
     block('Gastgeber', 'hosts', store.hosts, (h) => `${esc(h.name)} <small>${esc(h.role || '')}</small>`) +
     block('Gäste', 'guests', store.guests, (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`) +
     block('Anlässe', 'occasions', store.occasions, (o) => esc(o));
 }
-function renderAll() { renderPlaces(); renderHosts(); renderOccasions(); renderGuestLists(); renderChips(); renderStamm(); }
+function renderAll() { updateLocState(); renderHosts(); renderOccasions(); renderGuestLists(); renderChips(); renderStamm(); }
 
 // ---------- Ort / PLZ ----------
 function placeFromFields() {
   return {
-    type: $('fPlaceType').value, name: $('fPlaceName').value.trim(), street: $('fStreet').value.trim(),
+    type: $('fPlaceType').value, name: $('fLocation').value.trim(), street: $('fStreet').value.trim(),
     country: $('fCountry').value, zip: $('fZip').value.trim(), city: $('fCity').value.trim(),
   };
 }
 function fillPlace(p) {
   $('fPlaceType').value = p.type || 'Restaurant';
-  $('fPlaceName').value = p.name || '';
+  $('fLocation').value = p.name || '';
   $('fStreet').value = p.street || '';
   $('fCountry').value = p.country || 'DE';
   $('fZip').value = p.zip || '';
@@ -139,17 +202,19 @@ async function onZipInput() {
     $('plzStatus').textContent = cities.length > 1 ? `${cities.length} Orte zu dieser PLZ – Auswahl im Feld „Ort“.` : `✓ ${cities[0]}`;
   }, 250);
 }
-function savePlace() {
+async function savePlace() {
   const p = placeFromFields();
-  if (!p.name) { $('plzStatus').textContent = 'Bitte zuerst einen Namen eintragen.'; return; }
-  const id = $('fPlaceSel').value;
-  let existing = store.places.find((x) => x.id === id) ||
+  if (!p.name) { alertStatus('Bitte zuerst einen Namen bei „Location“ eintragen.'); $('fLocation').focus(); return; }
+  if (!p.city && p.zip && isComplete(p.country, p.zip)) { p.city = (await lookup(p.country, p.zip))[0] || ''; $('fCity').value = p.city; }
+  let existing = selectedLocation() ||
     store.places.find((x) => x.name.toLowerCase() === p.name.toLowerCase() && (x.city || '') === p.city);
+  const isNew = !existing;
   if (existing) Object.assign(existing, p); else { existing = { id: uid(), ...p }; store.places.push(existing); }
   remember(p.country, p.zip, p.city);
-  save(); renderPlaces(); renderStamm();
-  $('fPlaceSel').value = existing.id; $('btnDelPlace').hidden = false;
-  $('plzStatus').textContent = `✓ „${p.name}“ gespeichert`;
+  save(); renderStamm();
+  form.locationId = existing.id;
+  updateLocState();
+  alertStatus(isNew ? `✓ „${p.name}“ in die Location-Liste aufgenommen` : `✓ „${p.name}“ aktualisiert`);
 }
 function matchSavedPlace(name, zip) {
   if (!name && !zip) return null;
@@ -223,13 +288,20 @@ function updateAmounts() {
 }
 
 // ---------- Beleg laden ----------
-let pdfjs;
+// Bibliotheken liegen als klassische Skripte in vendor/ und werden erst bei Bedarf geladen.
+const loaded = {};
+function loadScript(src) {
+  return loaded[src] || (loaded[src] = new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src;
+    s.onload = res; s.onerror = () => { delete loaded[src]; rej(new Error('Datei fehlt: ' + src)); };
+    document.head.appendChild(s);
+  }));
+}
 async function getPdfjs() {
-  if (!pdfjs) {
-    pdfjs = await import('../vendor/pdfjs/pdf.min.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
-  }
-  return pdfjs;
+  // pdf.worker im Hauptthread laden: funktioniert auch ohne Webserver
+  await loadScript('vendor/pdf.worker.min.js');
+  await loadScript('vendor/pdf.min.js');
+  return window.pdfjsLib;
 }
 function fileToDataUrl(file) {
   return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
@@ -295,21 +367,27 @@ function renderThumbs() {
 
 // ---------- Texterkennung ----------
 let worker;
-function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Skript nicht ladbar: ' + src)); document.head.appendChild(s); });
+const b64ToBytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const blobUrl = (code) => URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+function simdSupported() {
+  try {
+    return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]));
+  } catch { return false; }
 }
 async function getWorker() {
   if (worker) return worker;
-  if (!window.Tesseract) await loadScript(new URL('../vendor/tesseract/tesseract.min.js', import.meta.url).href);
-  const base = new URL('../vendor/', import.meta.url).href;
-  worker = await window.Tesseract.createWorker('deu', 1, {
-    workerPath: base + 'tesseract/worker.min.js',
-    corePath: base + 'tesseract/',
-    langPath: base + 'lang',
+  $('ocrStatus').textContent = 'Texterkennung wird geladen …';
+  await loadScript('vendor/tesseract.min.js');
+  await Promise.all([loadScript('vendor/tess-worker.js'), loadScript(simdSupported() ? 'vendor/tess-core-simd.js' : 'vendor/tess-core.js'), loadScript('vendor/tess-deu.js')]);
+  const emb = window.__EMB;
+  worker = await window.Tesseract.createWorker([{ code: 'deu', data: b64ToBytes(emb.deu) }], 1, {
+    // Kern und Worker in einen Blob: so muss der Worker nichts nachladen (geht auch unter file://)
+    workerPath: blobUrl(emb.core + '\n;self.TesseractCore = typeof TesseractCore !== "undefined" ? TesseractCore : self.TesseractCore;\n' + emb.worker),
+    workerBlobURL: false,
+    cacheMethod: 'none',
     gzip: true,
     logger: (m) => {
       if (m.status === 'recognizing text') $('ocrStatus').textContent = `Lese Beleg … ${Math.round(m.progress * 100)} %`;
-      else if (m.status) $('ocrStatus').textContent = 'Texterkennung wird vorbereitet …';
     },
   });
   await worker.setParameters({ preserve_interword_spaces: '1' });
@@ -349,10 +427,10 @@ function applyParsed(r) {
   form.ocrTotal = r.total;
   const saved = matchSavedPlace(r.name, r.zip);
   if (saved) {
-    $('fPlaceSel').value = saved.id; $('btnDelPlace').hidden = false; fillPlace(saved);
+    selectLocation(saved);
     found.push(`Ort „${saved.name}“ (gespeichert)`);
-  } else if (!$('fPlaceSel').value) {
-    if (r.name && !$('fPlaceName').value) $('fPlaceName').value = r.name;
+  } else if (!form.locationId) {
+    if (r.name && !$('fLocation').value) { $('fLocation').value = r.name; updateLocState(); }
     if (r.street && !$('fStreet').value) $('fStreet').value = r.street;
     if (r.city && !$('fCity').value) { $('fCity').value = r.city; form.autoCity = false; }
     if (r.zip && !$('fZip').value) {
@@ -466,10 +544,10 @@ function confirmMissing(missing) {
 let clearSig;
 function resetForm() {
   form = freshForm();
-  for (const id of ['fDate', 'fPlaceName', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee', 'fGuestName', 'fGuestCompany']) $(id).value = '';
-  $('fPlaceSel').value = ''; $('fPlaceType').value = 'Restaurant'; $('fCountry').value = 'DE'; $('fOccasion').value = '';
+  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee', 'fGuestName', 'fGuestCompany']) $(id).value = '';
+  $('fPlaceType').value = 'Restaurant'; $('fCountry').value = 'DE'; $('fOccasion').value = '';
   $('fSignPlace').value = store.settings.signPlace; $('fSignDate').value = todayIso();
-  $('btnDelPlace').hidden = true; $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
+  updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
   $('fileInput').value = '';
   clearSig?.();
   renderThumbs(); renderChips(); updateAmounts();
@@ -517,17 +595,32 @@ function bind() {
   });
   $('btnOcr').onclick = runOcr;
 
-  $('fPlaceSel').onchange = () => {
-    const p = store.places.find((x) => x.id === $('fPlaceSel').value);
-    $('btnDelPlace').hidden = !p;
-    if (p) fillPlace(p);
-  };
+  const locInput = $('fLocation');
+  locInput.addEventListener('input', () => {
+    const sel = selectedLocation();
+    if (sel && sel.name !== locInput.value.trim()) form.locationId = null;
+    openLoc(true); updateLocState();
+  });
+  locInput.addEventListener('focus', () => openLoc(true));
+  locInput.addEventListener('keydown', (e) => {
+    const items = locItems();
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (!locOpen) openLoc(true); locActive = Math.min(items.length - 1, locActive + 1); renderLocList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); locActive = Math.max(0, locActive - 1); renderLocList(); }
+    else if (e.key === 'Enter') { if (locOpen && items[locActive]) { e.preventDefault(); selectLocation(items[locActive]); } }
+    else if (e.key === 'Escape') openLoc(false);
+  });
+  $('btnLocToggle').onclick = () => { openLoc(!locOpen); if (locOpen) locInput.focus(); };
+  $('locList').addEventListener('mousedown', (e) => e.preventDefault()); // Fokus im Feld lassen
+  $('locList').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]'), del = e.target.closest('[data-del]'), li = e.target.closest('li[data-id]');
+    if (ed) return editLocation(ed.dataset.edit);
+    if (del) return deleteLocation(del.dataset.del);
+    if (li) selectLocation(store.places.find((p) => p.id === li.dataset.id));
+  });
+  document.addEventListener('click', (e) => { if (locOpen && !$('locBox').contains(e.target)) openLoc(false); });
+  $('fPlaceType').addEventListener('change', updateLocState);
   $('btnSavePlace').onclick = savePlace;
-  $('btnDelPlace').onclick = () => {
-    const id = $('fPlaceSel').value;
-    store.places = store.places.filter((p) => p.id !== id); save(); renderPlaces(); renderStamm();
-    alertStatus('Ort gelöscht');
-  };
+  $('btnDelPlace').onclick = () => { if (form.locationId) deleteLocation(form.locationId); };
   $('fZip').addEventListener('input', onZipInput);
   $('fCountry').addEventListener('change', () => { onZipInput(); updateAmounts(); });
   $('fCity').addEventListener('input', () => { form.autoCity = false; });
@@ -569,6 +662,7 @@ function bind() {
     if (!$('fSignPlace').value) $('fSignPlace').value = store.settings.signPlace;
   });
   $('stammLists').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit]'); if (ed) return editLocation(ed.dataset.edit);
     const b = e.target.closest('button.x'); if (!b) return;
     store[b.dataset.kind].splice(Number(b.dataset.i), 1); save(); renderAll();
   });
@@ -596,3 +690,4 @@ for (const p of store.places) remember(p.country, p.zip, p.city);
 
 // Für Tests
 window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc };
+})();

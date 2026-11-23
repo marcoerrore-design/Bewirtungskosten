@@ -1,4 +1,7 @@
-import { parseReceipt, parseAmount } from '../js/receipt.js';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const ctx = {}; vm.createContext(ctx); vm.runInContext(fs.readFileSync(new URL('../js/receipt.js', import.meta.url), 'utf8'), ctx);
+const { parseReceipt, parseAmount } = ctx.Receipt;
 import assert from 'node:assert/strict';
 const a = `Ristorante Da Mario
 Hauptstraße 12
