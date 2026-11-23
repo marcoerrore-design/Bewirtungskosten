@@ -31,7 +31,7 @@ function loadStore() {
     hosts: s.hosts || [],
     guests: s.guests || [],
     occasions: s.occasions || [...DEFAULT_OCCASIONS],
-    settings: { company: '', signPlace: '', lastHostId: '', ...(s.settings || {}) },
+    settings: { company: '', street: '', zip: '', city: '', country: 'DE', logo: '', lastHostId: '', ...(s.settings || {}) },
   };
 }
 let store = loadStore();
@@ -70,6 +70,7 @@ function ask(title, fields, okLabel = 'Speichern', html = '') {
 // ---------- Auswahllisten ----------
 function renderCountry() {
   $('fCountry').innerHTML = COUNTRIES.map((c) => `<option value="${c.code}">${c.code} – ${esc(c.name)}</option>`).join('');
+  $('sCountry').innerHTML = $('fCountry').innerHTML;
 }
 // ---------- Location (bearbeitbares Dropdown) ----------
 const PLACE_TYPES = ['Restaurant', 'Hotel', 'Sonstiges'];
@@ -155,13 +156,16 @@ function renderOccasions() {
   if (store.occasions.includes(cur)) sel.value = cur;
 }
 function renderGuestLists() {
-  $('guestList').innerHTML = store.guests.map((g) => `<option value="${esc(g.name)}">${esc(g.company || '')}</option>`).join('');
-  const companies = [...new Set(store.guests.map((g) => g.company).filter(Boolean))];
-  $('companyList').innerHTML = companies.map((c) => `<option value="${esc(c)}">`).join('');
+  const key = (g) => (g.name + '|' + (g.company || '')).toLowerCase();
+  const taken = new Set(form.guests.map(key));
+  const avail = store.guests.map((g, i) => ({ g, i })).filter(({ g }) => !taken.has(key(g)))
+    .sort((a, b) => (a.g.company || '').localeCompare(b.g.company || '', 'de') || a.g.name.localeCompare(b.g.name, 'de'));
+  $('fGuestSel').innerHTML = `<option value="">${store.guests.length ? (avail.length ? '– Person auswählen –' : '– alle gespeicherten Personen gewählt –') : '– noch keine Personen gespeichert –'}</option>` +
+    avail.map(({ g, i }) => `<option value="${i}">${esc(g.name)}${g.company ? ' – ' + esc(g.company) : ''}</option>`).join('');
 }
 function renderChips() {
   $('guestChips').innerHTML = form.guests.length
-    ? form.guests.map((g, i) => `<span class="chip">${esc(g.name)}${g.company ? ` <small>${esc(g.company)}</small>` : ''}<button type="button" data-i="${i}" aria-label="entfernen">×</button></span>`).join('')
+    ? form.guests.map((g, i) => `<span class="chip${g.company ? '' : ' warn-chip'}">${esc(g.name)}${g.company ? ` <small>${esc(g.company)}</small>` : ' <small>Firma fehlt</small>'}<button type="button" data-i="${i}" aria-label="entfernen">×</button></span>`).join('')
     : '<span class="hint">Noch keine Gäste eingetragen.</span>';
 }
 function renderStamm() {
@@ -205,7 +209,7 @@ async function onZipInput() {
     if (normalizeZip(country, $('fZip').value) !== normalizeZip(country, zip)) return; // veraltet
     $('cityList').innerHTML = cities.map((c) => `<option value="${esc(c)}">`).join('');
     if (!cities.length) { $('plzStatus').textContent = window.Plz.offline() ? 'PLZ-Suche hier nicht erreichbar – Ort bitte von Hand eintragen.' : 'PLZ nicht gefunden – Ort bitte von Hand eintragen.'; return; }
-    if (form.autoCity || !$('fCity').value.trim()) { $('fCity').value = cities[0]; form.autoCity = true; }
+    if (form.autoCity || !$('fCity').value.trim()) { $('fCity').value = cities[0]; form.autoCity = true; changed(); }
     $('plzStatus').textContent = cities.length > 1 ? `${cities.length} Orte zu dieser PLZ – Auswahl im Feld „Ort“.` : `✓ ${cities[0]}`;
   }, 250);
 }
@@ -233,19 +237,18 @@ function matchSavedPlace(name, zip) {
 }
 
 // ---------- Gäste ----------
-function addGuest() {
-  const name = $('fGuestName').value.trim();
-  if (!name) return;
-  let company = $('fGuestCompany').value.trim();
-  const known = store.guests.find((g) => g.name.toLowerCase() === name.toLowerCase());
-  if (!company && known) company = known.company || '';
-  form.guests.push({ name, company });
-  if (!known) store.guests.push({ name, company });
-  else if (company && !known.company) known.company = company;
-  save();
-  $('fGuestName').value = ''; $('fGuestCompany').value = '';
-  $('fGuestName').focus();
-  renderChips(); renderGuestLists(); renderStamm(); changed();
+function pushGuest(g) {
+  form.guests.push({ name: g.name, company: g.company || '' });
+  renderChips(); renderGuestLists(); changed();
+}
+async function addGuest() {
+  const v = await ask('Bewirtete Person hinzufügen', [{ label: 'Name *', required: true }, { label: 'Firma *', required: true }], 'Hinzufügen');
+  if (!v) return;
+  const [name, company] = v;
+  if (!name || !company) { alertStatus('Name und Firma sind Pflichtfelder.'); return; }
+  let known = store.guests.find((g) => g.name.toLowerCase() === name.toLowerCase() && (g.company || '').toLowerCase() === company.toLowerCase());
+  if (!known) { known = { name, company }; store.guests.push(known); save(); renderStamm(); }
+  pushGuest(known);
 }
 
 // ---------- Beträge ----------
@@ -493,13 +496,15 @@ function buildPrint() {
   if (!p.name) missing.push('Ort der Bewirtung');
   if (!host) missing.push('Gastgeber');
   if (!form.guests.length) missing.push('bewirtete Personen');
+  else if (form.guests.some((g) => !g.company)) missing.push('Firma bei ' + form.guests.filter((g) => !g.company).map((g) => g.name).join(', '));
   if (!occasion) missing.push('Anlass');
   if (!c.gross) missing.push('Betrag');
 
   const pages = `
   <section class="p-page">
     <header class="p-head">
-      <div>${company ? `<div class="p-company">${esc(company)}</div>` : ''}<h1>Bewirtungskostenbeleg</h1>
+      ${store.settings.logo ? `<img class="p-logo" src="${store.settings.logo}" alt="">` : ''}
+      <div>${company ? `<div class="p-company">${esc(company)}</div><div class="p-addr">${companyLines().map(esc).join(' · ')}</div>` : ''}<h1>Bewirtungskostenbeleg</h1>
       <div class="p-law">Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)</div></div>
     </header>
     <table class="p-facts">
@@ -553,10 +558,11 @@ function pdfData() {
   const country = COUNTRIES.find((x) => x.code === p.country);
   const hostAttends = $('fHostAttends').checked && host;
   const n = form.guests.length + (hostAttends ? 1 : 0);
+  syncSignPlace();
   const signPlaceDate = [$('fSignPlace').value.trim(), deDate($('fSignDate').value)].filter(Boolean).join(', ');
   const safe = (t) => String(t || '').replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-');
   return {
-    company: store.settings.company,
+    company: store.settings.company, companyLines: companyLines(), logo: store.settings.logo,
     date: deDate($('fDate').value),
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
@@ -630,9 +636,9 @@ function showPdfReady() {
 let sig;
 function resetForm() {
   form = freshForm();
-  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee', 'fGuestName', 'fGuestCompany']) $(id).value = '';
+  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
   $('fPlaceType').value = 'Restaurant'; $('fCountry').value = 'DE'; $('fOccasion').value = '';
-  $('fSignPlace').value = store.settings.signPlace; $('fSignDate').value = todayIso();
+  $('fSignPlace').value = ''; $('fSignDate').value = todayIso();
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
   $('fileInput').value = '';
   sig?.clear();
@@ -669,10 +675,31 @@ async function importStore(file) {
     alertStatus('✓ Stammdaten importiert');
   } catch { alertStatus('Import fehlgeschlagen: keine gültige Datei.'); }
 }
+function renderLogo() {
+  const l = store.settings.logo;
+  $('logoBox').innerHTML = l ? `<img src="${l}" alt="Firmenlogo">` : '<span class="hint">Kein Logo</span>';
+  $('btnLogoDel').hidden = !l;
+}
+// Logo als PNG (Transparenz bleibt erhalten), höchstens 800 px breit/hoch
+async function logoToDataUrl(file) {
+  const url = await fileToDataUrl(file);
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const w0 = img.naturalWidth || 800, h0 = img.naturalHeight || 300;
+  const s = Math.min(1, 800 / Math.max(w0, h0));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(w0 * s)); cv.height = Math.max(1, Math.round(h0 * s));
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/png');
+}
+function companyLines() {
+  const st = store.settings;
+  const country = COUNTRIES.find((c) => c.code === st.country);
+  return [st.street, [st.zip, st.city].filter(Boolean).join(' ') + (country && st.country !== 'DE' && (st.zip || st.city) ? ', ' + country.name : '')].filter((x) => x && x.trim());
+}
 const alertStatus = (t) => { $('plzStatus').textContent = t; };
 function loadSettings() {
-  $('sCompany').value = store.settings.company || '';
-  $('sSignPlace').value = store.settings.signPlace || '';
+  for (const [id, k] of [['sCompany', 'company'], ['sStreet', 'street'], ['sZip', 'zip'], ['sCity', 'city'], ['sCountry', 'country']]) $(id).value = store.settings[k] || (k === 'country' ? 'DE' : '');
+  renderLogo();
 }
 
 // ---------- Ereignisse ----------
@@ -731,14 +758,20 @@ function bind() {
     renderHosts(); $('fHost').value = h.id; renderStamm(); changed();
   };
   $('btnAddGuest').onclick = addGuest;
-  for (const id of ['fGuestName', 'fGuestCompany']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addGuest(); } });
-  $('fGuestName').addEventListener('change', () => {
-    const g = store.guests.find((x) => x.name.toLowerCase() === $('fGuestName').value.trim().toLowerCase());
-    if (g && !$('fGuestCompany').value) $('fGuestCompany').value = g.company || '';
+  $('fGuestSel').addEventListener('change', async () => {
+    const g = store.guests[Number($('fGuestSel').value)];
+    $('fGuestSel').value = '';
+    if (!g) return;
+    if (!g.company) {
+      const v = await ask(`Firma von ${g.name}`, [{ label: 'Firma *', required: true }], 'Übernehmen');
+      if (!v || !v[0]) return;
+      g.company = v[0]; save(); renderStamm();
+    }
+    pushGuest(g);
   });
   $('guestChips').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-i]'); if (!b) return;
-    form.guests.splice(Number(b.dataset.i), 1); renderChips(); changed();
+    form.guests.splice(Number(b.dataset.i), 1); renderChips(); renderGuestLists(); changed();
   });
   $('btnAddOccasion').onclick = async () => {
     const v = await ask('Anlass hinzufügen', [{ label: 'Anlass', required: true }]);
@@ -753,11 +786,22 @@ function bind() {
   });
   $('fFeeFull').addEventListener('change', updateAmounts);
 
-  $('sCompany').addEventListener('change', () => { store.settings.company = $('sCompany').value.trim(); save(); });
-  $('sSignPlace').addEventListener('change', () => {
-    store.settings.signPlace = $('sSignPlace').value.trim(); save();
-    if (!$('fSignPlace').value) $('fSignPlace').value = store.settings.signPlace;
+  for (const [id, k] of [['sCompany', 'company'], ['sStreet', 'street'], ['sZip', 'zip'], ['sCity', 'city'], ['sCountry', 'country']]) {
+    $(id).addEventListener('change', () => { store.settings[k] = $(id).value.trim(); save(); });
+  }
+  $('sZip').addEventListener('input', async () => {
+    const cc = $('sCountry').value, z = $('sZip').value;
+    if (!isComplete(cc, z) || $('sCity').value.trim()) return;
+    const cities = await lookup(cc, z);
+    if (cities[0] && !$('sCity').value.trim()) { $('sCity').value = cities[0]; store.settings.city = cities[0]; save(); }
   });
+  $('sLogo').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try { store.settings.logo = await logoToDataUrl(f); save(); renderLogo(); }
+    catch { alertStatus('Logo konnte nicht gelesen werden.'); }
+  });
+  $('btnLogoDel').onclick = () => { store.settings.logo = ''; save(); renderLogo(); };
   $('stammLists').addEventListener('click', (e) => {
     const ed = e.target.closest('[data-edit]'); if (ed) return editLocation(ed.dataset.edit);
     const b = e.target.closest('button.x'); if (!b) return;
@@ -812,7 +856,9 @@ function collectReport() {
 function isEmptyReport(r) {
   return !r.pages.length && !r.guests.length && !r.signature && !r.fields.fDate && !r.fields.fLocation && !r.summary.gross && !r.fields.fOccasion;
 }
+function syncSignPlace() { $('fSignPlace').value = $('fCity').value.trim(); }
 function changed() {
+  syncSignPlace();
   if (restoring || !current) return;
   updateSummaries();
   $('saveState').textContent = 'Speichert …';
@@ -991,7 +1037,6 @@ bind();
 sig = initSignature();
 $('fDate').value = '';
 $('fSignDate').value = todayIso();
-$('fSignPlace').value = store.settings.signPlace;
 updateAmounts();
 startup();
 // Bekannte Orte in den PLZ-Cache übernehmen

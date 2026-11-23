@@ -19,8 +19,24 @@ async function build(d) {
   const muted = () => doc.setTextColor(90, 90, 90);
   const line = (yy, w = 0.2, g = 170) => { doc.setDrawColor(g); doc.setLineWidth(w); doc.line(M, yy, R, yy); };
 
-  // Kopf
-  if (d.company) { doc.setFont('helvetica', 'bold'); doc.setFontSize(11); ink(); doc.text(d.company, M, y); y += 6; }
+  // Kopf: Firma links, Logo rechts
+  let logoBottom = M;
+  if (d.logo) {
+    const s = await imageSize(d.logo);
+    if (s) {
+      const maxW = 50, maxH = 20, k = Math.min(maxW / s.w, maxH / s.h);
+      const w = s.w * k, h = s.h * k;
+      doc.addImage(d.logo, 'PNG', R - w, M - 4, w, h);
+      logoBottom = M - 4 + h + 2;
+    }
+  }
+  if (d.company) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); ink(); doc.text(d.company, M, y); y += 4.6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); muted();
+    for (const l of d.companyLines || []) { doc.text(l, M, y); y += 4; }
+    y += 2;
+  }
+  y = Math.max(y, logoBottom + 4);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(18); ink(); doc.text('Bewirtungskostenbeleg', M, y + 2); y += 8;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); muted();
   const law = doc.splitTextToSize('Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)', R - M);

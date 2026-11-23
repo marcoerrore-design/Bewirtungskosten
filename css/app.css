@@ -287,3 +287,17 @@ select { -webkit-appearance: none; appearance: none; padding-right: 32px;
 }
 @media (prefers-reduced-motion: reduce) { .step-chev { transition: none; } }
 .step-body > .combo { margin-bottom: 14px; }
+.req { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 6px; }
+.auto { color: var(--muted); font-weight: 400; }
+input.readonly { background: var(--bg); color: var(--muted); }
+.warn-chip { background: var(--warn-bg); }
+.warn-chip small { color: var(--warn); }
+.logo-row { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.logo-box { width: 160px; height: 72px; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; background: #fff; overflow: hidden; }
+.logo-box img { max-width: 92%; max-height: 88%; object-fit: contain; }
+.logo-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.small-btn { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+h2.mt { margin-top: 18px; }
+.p-head { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.p-logo { max-width: 50mm; max-height: 20mm; object-fit: contain; }
+.p-addr { font-size: 9pt; color: #444; margin: -2px 0 6px; }

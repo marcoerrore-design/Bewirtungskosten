@@ -134,14 +134,11 @@
     </label>
     <label class="check"><input type="checkbox" id="fHostAttends" checked> Gastgeber hat an der Bewirtung teilgenommen</label>
 
-    <div class="field-label">Bewirtete Personen</div>
+    <div class="field-label">Bewirtete Personen <span class="req">Pflicht: Name und Firma</span></div>
     <div class="chips" id="guestChips"></div>
     <div class="combo">
-      <input id="fGuestName" placeholder="Name" autocomplete="off" list="guestList">
-      <input id="fGuestCompany" placeholder="Firma (optional)" autocomplete="off" list="companyList">
-      <button type="button" class="small" id="btnAddGuest">Hinzufügen</button>
-      <datalist id="guestList"></datalist>
-      <datalist id="companyList"></datalist>
+      <select id="fGuestSel" aria-label="Bewirtete Person auswählen"></select>
+      <button type="button" class="ghost small" id="btnAddGuest">+ hinzufügen</button>
     </div>
 
     <label>Anlass der Bewirtung
@@ -189,7 +186,7 @@
     </button>
     <div class="step-body">
     <div class="grid g2">
-      <label>Ort<input id="fSignPlace" autocomplete="off"></label>
+      <label>Ort <small class="auto">= Ort der Bewirtung</small><input id="fSignPlace" readonly tabindex="-1" class="readonly"></label>
       <label>Datum<input type="date" id="fSignDate"></label>
     </div>
     <div class="sig-wrap">
@@ -216,8 +213,24 @@
   </header>
   <h1 class="edit-title">Einstellungen und Stammdaten</h1>
   <section class="card">
-      <label>Firma (erscheint im Kopf der Abrechnung)<input id="sCompany" autocomplete="organization"></label>
-      <label>Standard-Ort für die Unterschrift<input id="sSignPlace"></label>
+      <h2>Firma</h2>
+      <p class="hint">Erscheint im Kopf jeder Abrechnung.</p>
+      <div class="logo-row">
+        <div class="logo-box" id="logoBox"><span class="hint">Kein Logo</span></div>
+        <div class="logo-actions">
+          <label class="btn-like small-btn" for="sLogo">Logo hochladen</label>
+          <input type="file" id="sLogo" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="vh">
+          <button type="button" class="ghost small danger" id="btnLogoDel" hidden>Logo entfernen</button>
+        </div>
+      </div>
+      <label>Firmenname<input id="sCompany" autocomplete="organization"></label>
+      <label>Straße, Hausnummer<input id="sStreet" autocomplete="street-address"></label>
+      <div class="grid g3 plz">
+        <label>Land<select id="sCountry"></select></label>
+        <label>PLZ<input id="sZip" inputmode="numeric" autocomplete="postal-code"></label>
+        <label>Ort<input id="sCity" autocomplete="address-level2"></label>
+      </div>
+      <h2 class="mt">Gespeicherte Listen</h2>
       <div class="stamm" id="stammLists"></div>
       <div class="row-actions">
         <button type="button" class="ghost small" id="btnExport">Stammdaten exportieren</button>
