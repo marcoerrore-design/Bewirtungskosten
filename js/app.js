@@ -278,6 +278,19 @@ function calc() {
   const deductible = r2(base7030 * 0.7);
   return { line, tip, fee, feeFull, gross, vat, net, inputTax, base7030, deductible, nonDeductible: r2(base7030 - deductible), foreign };
 }
+function vmaNow() {
+  return window.Vma ? Vma.compute({ country: $('fCountry').value, city: $('fCity').value, date: $('fDate').value, meal: $('fMeal').value }) : null;
+}
+function vmaPlace(r) {
+  const cn = (COUNTRIES.find((x) => x.code === r.country) || {}).name || r.country;
+  return r.country === 'DE' ? 'Inland' : cn + (r.place ? ` – ${r.place}` : '');
+}
+function vmaHtml() {
+  const v = vmaNow();
+  if (!v) return '';
+  if (!v.ok) return `<p class="hint vma-hint">Kürzung Verpflegungsmehraufwand: ${esc(v.reason)}</p>`;
+  return `<div class="vma"><span>Kürzung Verpflegungsmehraufwand<small>${esc(v.mealKind)} ${v.share * 100} % von ${eur.format(v.rate.full)} (${esc(vmaPlace(v.rate))})</small></span><b>− ${eur.format(v.cut)}</b></div>`;
+}
 function updateAmounts() {
   const c = calc();
   for (const r of [19, 7, 0]) {
@@ -294,7 +307,8 @@ function updateAmounts() {
     <div><span>Vorsteuer</span><b>${eur.format(c.inputTax)}</b></div>
     <div><span>Betriebsausgabe abzugsfähig (70 %)</span><b>${eur.format(c.deductible)}</b></div>
     <div><span>nicht abzugsfähig (30 %)</span><b>${eur.format(c.nonDeductible)}</b></div>
-    ${c.feeFull && c.fee ? `<div><span>Bankgebühr, voll abzugsfähig</span><b>${eur.format(c.fee)}</b></div>` : ''}`;
+    ${c.feeFull && c.fee ? `<div><span>Bankgebühr, voll abzugsfähig</span><b>${eur.format(c.fee)}</b></div>` : ''}
+    ${vmaHtml()}`;
   const w = $('sumWarn');
   const sumReceipt = r2(c.line[19].gross + c.line[7].gross + c.line[0].gross);
   if (form.ocrTotal != null && Math.abs(form.ocrTotal - sumReceipt) > 0.05 && Math.abs(form.ocrTotal - r2(sumReceipt + c.tip)) > 0.05) {
@@ -589,6 +603,7 @@ function pdfData() {
     calc: c,
     note: (form.pages.length ? 'Die Rechnung ist als Anlage beigefügt.' : 'Rechnung: bitte beifügen.') + (c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : ''),
     signPlaceDate, signature: form.signature, pages: form.pages,
+    vma: (() => { const v = vmaNow(); if (v && v.rate) v.placeLabel = vmaPlace(v.rate); if (v) { v.city = p.city; v.countryFull = country ? country.name : p.country; } return v; })(),
     fileName: `Bewirtungskosten-Abrechnung_${$('fDate').value || todayIso()}${p.name ? '_' + safe(p.name) : ''}.pdf`,
   };
 }
@@ -875,6 +890,7 @@ function isEmptyReport(r) {
 function syncSignPlace() { $('fSignPlace').value = $('fCity').value.trim(); }
 function changed() {
   syncSignPlace();
+  updateAmounts();
   if (restoring || !current) return;
   updateSummaries();
   $('saveState').textContent = 'Speichert …';

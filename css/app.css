@@ -93,6 +93,9 @@ button:disabled { opacity: .45; cursor: default; }
 .split div { display: flex; justify-content: space-between; gap: 12px; }
 .split b { font-variant-numeric: tabular-nums; }
 .split .hint { margin: 0; }
+.split .vma { margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line, #ccc); align-items: flex-start; }
+.split .vma small { display: block; color: var(--muted, #666); font-size: 12px; }
+.split .vma-hint { margin-top: 6px; }
 
 .sig-wrap canvas { display: block; width: 100%; height: auto; aspect-ratio: 900/300; background: #fff; border: 1px solid var(--line); border-radius: 8px; touch-action: none; cursor: crosshair; }
 .sig-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 6px; }

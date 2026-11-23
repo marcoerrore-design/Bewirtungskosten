@@ -129,6 +129,59 @@ async function build(d) {
     const fmt = src.startsWith('data:image/png') ? 'PNG' : 'JPEG';
     doc.addImage(src, fmt, M + (maxW - w) / 2, M + 4, w, h, undefined, 'FAST');
   }
+  // Letzte Seite (nach den Belegen): Kürzung des Verpflegungsmehraufwands (Dienstreise, Mahlzeit vom Arbeitgeber/Unternehmen bezahlt)
+  const v = d.vma;
+  if (v) {
+    doc.addPage(); y = M;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16); ink(); doc.text('Kürzung des Verpflegungsmehraufwands', M, y + 2); y += 7;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); muted();
+    const sub = doc.splitTextToSize('Kürzung der Verpflegungspauschale bei Gestellung einer Mahlzeit während einer Dienstreise (§ 9 Abs. 4a Satz 8 EStG). Gehört zur Bewirtungskosten-Abrechnung vom ' + (d.date || '') + '.', R - M);
+    doc.text(sub, M, y); y += sub.length * 3.6 + 1;
+    line(y, 0.6, 0); y += 6;
+    doc.setFontSize(10);
+    fact('Reisetag', [d.dateLong || d.date || '']);
+    fact('Ort der Mahlzeit', [p.name, [p.zip, p.city].filter(Boolean).join(' ') + (v.countryFull ? ', ' + v.countryFull : '')].filter((x) => x && x.trim()), true);
+    if (v.rate) fact('Maßgebliche Pauschale', [`${v.placeLabel} (Stand ${v.rate.year})`]);
+    fact('Mahlzeit', [v.meal ? (v.meal === 'Brunch' ? 'Brunch (wird als Frühstück gekürzt)' : v.meal) : 'nicht angegeben']);
+
+    if (!v.ok) {
+      y += 2; doc.setFont('helvetica', 'bold'); doc.setTextColor(161, 92, 0);
+      doc.text(doc.splitTextToSize(v.reason, R - M), M, y); y += 8;
+    } else {
+      y += 2;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); ink(); doc.text('Berechnung', M, y); y += 6;
+      doc.setFontSize(8.5); doc.text('Betrag', R, y, { align: 'right' });
+      y += 1.6; line(y, 0.3, 0); y += 4.6;
+      doc.setFontSize(10);
+      const row = (label, val, bold = false, thin = true) => {
+        doc.setFont('helvetica', bold ? 'bold' : 'normal'); ink();
+        doc.text(label, M, y); doc.text(val, R, y, { align: 'right' });
+        y += 1.8; if (thin) line(y, 0.15, 210); y += 4.4;
+      };
+      row('Tagespauschale bei 24 Stunden Abwesenheit', money(v.rate.full));
+      row('Pauschale An-/Abreisetag bzw. mehr als 8 Stunden', money(v.rate.partial));
+      row(`Kürzungssatz ${v.mealKind}`, `${v.share * 100} % der Tagespauschale (24 h)`);
+      y -= 1.6; line(y, 0.4, 0); y += 4.8;
+      row(`Kürzung Verpflegungsmehraufwand (${v.mealKind})`, money(v.cut), true, false);
+      y += 3;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); muted();
+      const rest = [
+        ['Verbleibende Pauschale an einem Tag mit 24 h Abwesenheit', v.restFull],
+        ['Verbleibende Pauschale am An-/Abreisetag bzw. bei mehr als 8 h', v.restPartial],
+      ];
+      for (const [l, val] of rest) { doc.text(l, M, y); doc.text(money(val), R, y, { align: 'right' }); y += 5; }
+      if (v.rate.night) { doc.text('Zur Information: Übernachtungspauschale', M, y); doc.text(money(v.rate.night), R, y, { align: 'right' }); y += 5; }
+    }
+
+    y += 4; doc.setFontSize(8.8); muted(); doc.setFont('helvetica', 'normal');
+    const hints = [
+      'Die Kürzung beträgt für ein Frühstück 20 % und für ein Mittag- oder Abendessen je 40 % der Pauschale für eine 24-stündige Abwesenheit an dem Ort, an dem die Mahlzeit stattfindet. Sie gilt auch an An- und Abreisetagen.',
+      'Werden an einem Reisetag mehrere Mahlzeiten gestellt, werden die Kürzungen addiert. Die Verpflegungspauschale des Tages kann dadurch höchstens auf 0,00 € sinken.',
+      'Grundlage: ' + (v.rate && v.rate.country !== 'DE' ? 'BMF-Schreiben vom 05.12.2025 zu den Pauschbeträgen für Auslandsdienstreisen ab 01.01.2026' : '§ 9 Abs. 4a EStG (Inlandspauschalen)') + '.' + (v.rate && !v.rate.exact ? ` Für das Jahr der Bewirtung ist noch keine Tabelle hinterlegt, verwendet wurden die Werte ${v.rate.year}.` : ''),
+    ];
+    for (const h of hints) { const t = doc.splitTextToSize(h, R - M); doc.text(t, M, y); y += t.length * 3.8 + 2; }
+  }
+
   doc.setProperties({ title: d.fileName.replace(/\.pdf$/, ''), subject: 'Bewirtungskosten-Abrechnung', creator: 'Bewirtungskosten-Abrechnung (Web-App)' });
   return doc.output('blob');
 }
