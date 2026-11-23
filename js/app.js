@@ -503,8 +503,8 @@ function buildPrint() {
   const pages = `
   <section class="p-page">
     <header class="p-head">
-      ${store.settings.logo ? `<img class="p-logo" src="${store.settings.logo}" alt="">` : ''}
-      <div>${company ? `<div class="p-company">${esc(company)}</div><div class="p-addr">${companyLines().map(esc).join(' · ')}</div>` : ''}<h1>Bewirtungskostenbeleg</h1>
+      ${store.settings.logo || company ? `<div class="p-firm">${store.settings.logo ? `<img class="p-logo" src="${store.settings.logo}" alt="">` : ''}${company ? `<div class="p-company">${esc(company)}</div>${companyLines().map((l) => `<div class="p-addr">${esc(l)}</div>`).join('')}` : ''}</div>` : ''}
+      <div><h1>Bewirtungskostenbeleg</h1>
       <div class="p-law">Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)</div></div>
     </header>
     <table class="p-facts">

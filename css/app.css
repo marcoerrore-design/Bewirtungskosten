@@ -301,3 +301,8 @@ h2.mt { margin-top: 18px; }
 .p-head { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .p-logo { max-width: 50mm; max-height: 20mm; object-fit: contain; }
 .p-addr { font-size: 9pt; color: #444; margin: -2px 0 6px; }
+.p-head { flex-direction: column; align-items: stretch; }
+.p-firm { align-self: flex-end; text-align: right; }
+.p-firm .p-logo { display: block; margin: 0 0 6px auto; }
+.p-firm .p-company { margin: 0; font-size: 10pt; }
+.p-firm .p-addr { margin: 0; }
