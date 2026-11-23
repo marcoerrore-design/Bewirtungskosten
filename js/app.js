@@ -12,6 +12,13 @@ const num2 = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumF
 const r2 = (n) => Math.round(n * 100) / 100;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const deDate = (iso) => (iso ? iso.split('-').reverse().join('.') : '');
+const WEEKDAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+// "2026-11-15" -> "Sonntag, 15.11.2026"
+const deDateLong = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${WEEKDAYS[new Date(y, m - 1, d).getDay()]}, ${deDate(iso)}`;
+};
 
 // ---------- Speicher (Stammdaten im Browser) ----------
 const STORE_KEY = 'bewirtung.store.v1';
@@ -508,7 +515,7 @@ function buildPrint() {
       <div class="p-law">Angaben zum Nachweis der Höhe und der betrieblichen Veranlassung von Bewirtungsaufwendungen (§ 4 Abs. 5 Satz 1 Nr. 2 EStG)</div></div>
     </header>
     <table class="p-facts">
-      <tr><th>Tag der Bewirtung</th><td>${esc(deDate($('fDate').value)) || '&nbsp;'}</td></tr>
+      <tr><th>Tag der Bewirtung</th><td>${esc(deDateLong($('fDate').value)) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
       <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${form.guests.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
@@ -564,6 +571,7 @@ function pdfData() {
   return {
     company: store.settings.company, companyLines: companyLines(), logo: store.settings.logo,
     date: deDate($('fDate').value),
+    dateLong: deDateLong($('fDate').value),
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
