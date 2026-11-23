@@ -509,7 +509,7 @@ function buildPrint() {
     </header>
     <table class="p-facts">
       <tr><th>Tag der Bewirtung</th><td>${esc(deDate($('fDate').value)) || '&nbsp;'}</td></tr>
-      <tr><th>Ort der Bewirtung</th><td><b>${esc(p.name)}</b>${p.type ? ` <span class="p-muted">(${esc(p.type)})</span>` : ''}<br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
+      <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
       <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${form.guests.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
       <tr><th>Teilnehmer gesamt</th><td>${participants} Person${participants === 1 ? '' : 'en'}${$('fHostAttends').checked && host ? ' (einschließlich Gastgeber)' : ''}</td></tr>

@@ -13,7 +13,7 @@ function imageSize(src) {
 async function build(d) {
   const { jsPDF } = root.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
-  const W = 210, M = 18, R = W - M, colL = M, colV = M + 52;
+  const W = 210, M = 18, R = W - M, colL = M, colV = M + 60;
   let y = M;
   const ink = () => doc.setTextColor(20, 20, 20);
   const muted = () => doc.setTextColor(90, 90, 90);
@@ -45,19 +45,20 @@ async function build(d) {
   // Angaben
   doc.setFontSize(10);
   const fact = (label, valueLines, boldFirst = false) => {
-    doc.setFont('helvetica', 'bold'); ink(); doc.text(label, colL, y);
+    doc.setFont('helvetica', 'bold'); ink();
+    const lab = doc.splitTextToSize(label, colV - colL - 3); doc.text(lab, colL, y);
     let yy = y;
     valueLines.forEach((v, i) => {
       doc.setFont('helvetica', boldFirst && i === 0 ? 'bold' : 'normal');
       const parts = doc.splitTextToSize(v || ' ', R - colV);
       doc.text(parts, colV, yy); yy += parts.length * 4.6;
     });
-    y = Math.max(y + 4.6, yy) + 1.6;
+    y = Math.max(y + lab.length * 4.6, yy) + 1.6;
     line(y - 3.4); y += 2;
   };
   const p = d.place;
   fact('Tag der Bewirtung', [d.date || '']);
-  fact('Ort der Bewirtung', [p.name + (p.type ? ` (${p.type})` : ''), p.street, [p.zip, p.city].filter(Boolean).join(' ') + (p.countryName ? ', ' + p.countryName : '')].filter((x) => x && x.trim()), true);
+  fact('Ort der Bewirtung' + (p.type ? ` (${p.type})` : ''), [p.name, p.street, [p.zip, p.city].filter(Boolean).join(' ') + (p.countryName ? ', ' + p.countryName : '')].filter((x) => x && x.trim()), true);
   fact('Gastgeber', [d.host || '']);
   fact('Bewirtete Personen', d.guests.length ? d.guests.map((g, i) => `${i + 1}. ${g.name}${g.company ? ' – ' + g.company : ''}`) : ['']);
   fact('Teilnehmer gesamt', [d.participants]);
