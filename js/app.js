@@ -53,6 +53,7 @@ function ask(title, fields, okLabel = 'Speichern', html = '') {
   $('dlgTitle').textContent = title;
   $('dlgOk').textContent = okLabel;
   $('dlgOk').hidden = !okLabel;
+  dlg.querySelector('button[value="cancel"]').textContent = okLabel ? 'Abbrechen' : 'Schließen';
   $('dlgBody').innerHTML = html + fields.map((f, i) => f.options
     ? `<label>${esc(f.label)}<select data-i="${i}">${f.options.map((o) => `<option value="${esc(o.value ?? o)}" ${(o.value ?? o) === f.value ? 'selected' : ''}>${esc(o.label ?? o)}</option>`).join('')}</select></label>`
     : `<label>${esc(f.label)}<input data-i="${i}" value="${esc(f.value || '')}" ${f.required ? 'required' : ''} autocomplete="off"></label>`).join('');
@@ -316,7 +317,7 @@ async function normalizeImage(file) {
   const url = await fileToDataUrl(file);
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
   const max = 2400, s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-  if (s === 1 && file.size < 2.5e6) return url;
+  if (s === 1 && file.size < 2.5e6 && /^data:image\/(jpeg|png)/.test(url)) return url;
   const cv = document.createElement('canvas');
   cv.width = Math.round(img.naturalWidth * s); cv.height = Math.round(img.naturalHeight * s);
   cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
@@ -533,19 +534,83 @@ function buildPrint() {
 }
 const PAGES_URL = 'https://marcoerrore-design.github.io/Bewirtungskosten/';
 const inPreview = (() => { try { return window.self !== window.top; } catch { return true; } })();
+function pdfData() {
+  const c = updateAmounts();
+  const p = placeFromFields();
+  const host = store.hosts.find((h) => h.id === $('fHost').value);
+  const country = COUNTRIES.find((x) => x.code === p.country);
+  const hostAttends = $('fHostAttends').checked && host;
+  const n = form.guests.length + (hostAttends ? 1 : 0);
+  const signPlaceDate = [$('fSignPlace').value.trim(), deDate($('fSignDate').value)].filter(Boolean).join(', ');
+  const safe = (t) => String(t || '').replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-');
+  return {
+    company: store.settings.company,
+    date: deDate($('fDate').value),
+    place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
+    host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
+    hostName: host ? host.name : '',
+    guests: form.guests,
+    participants: `${n} Person${n === 1 ? '' : 'en'}${hostAttends ? ' (einschließlich Gastgeber)' : ''}`,
+    occasion: [$('fOccasion').value, $('fOccasionNote').value.trim()].filter(Boolean).join(' – '),
+    calc: c,
+    note: (form.pages.length ? 'Die Rechnung ist als Anlage beigefügt.' : 'Rechnung: bitte beifügen.') + (c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : ''),
+    signPlaceDate, signature: form.signature, pages: form.pages,
+    fileName: `Bewirtung_${$('fDate').value || todayIso()}${p.name ? '_' + safe(p.name) : ''}.pdf`,
+  };
+}
+let lastPdf = null;
 async function doPrint() {
   const missing = buildPrint();
   if (inPreview) {
-    await ask('Drucken in der Vorschau nicht möglich', [], '', `<p class="dlg-text">Diese Vorschau darf keinen Druckdialog öffnen. Zum Drucken oder Speichern als PDF bitte die Online-Version öffnen:</p><p><a href="${PAGES_URL}" target="_blank" rel="noopener">${PAGES_URL}</a></p>`);
+    await ask('PDF in der Vorschau nicht möglich', [], '', `<p class="dlg-text">Diese Vorschau darf keine Dateien speichern. Für das PDF bitte die Online-Version öffnen:</p><p><a href="${PAGES_URL}" target="_blank" rel="noopener">${PAGES_URL}</a></p>`);
     return;
   }
-  if (missing.length && !(await confirmDlg('Angaben fehlen', `Es fehlen noch: ${missing.join(', ')}. Trotzdem drucken?`, 'Trotzdem drucken'))) return;
-  await Promise.all([...$('print').querySelectorAll('img')].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r; })));
-  const prevTitle = document.title;
-  const p = placeFromFields();
-  document.title = `Bewirtung ${$('fDate').value || ''} ${p.name || ''}`.trim();
-  window.print();
-  setTimeout(() => { document.title = prevTitle; }, 500);
+  if (missing.length && !(await confirmDlg('Angaben fehlen', `Es fehlen noch: ${missing.join(', ')}. Trotzdem ein PDF erstellen?`, 'Trotzdem erstellen'))) return;
+  const btns = [$('btnPrint'), $('btnPrint2')];
+  btns.forEach((b) => { b.disabled = true; });
+  const label = $('btnPrint2').textContent;
+  $('btnPrint2').textContent = 'PDF wird erstellt …';
+  try {
+    await loadScript('vendor/jspdf.umd.min.js');
+    await loadScript('js/pdf-export.js');
+    const d = pdfData();
+    const blob = await window.PdfExport.build(d);
+    if (lastPdf) URL.revokeObjectURL(lastPdf.url);
+    lastPdf = { blob, name: d.fileName, url: URL.createObjectURL(blob) };
+    showPdfReady();
+  } catch (e) {
+    console.error(e);
+    await ask('PDF konnte nicht erstellt werden', [], '', `<p class="dlg-text">${esc(e.message || e)}</p>`);
+  } finally {
+    btns.forEach((b) => { b.disabled = false; });
+    $('btnPrint2').textContent = label;
+  }
+}
+function showPdfReady() {
+  const file = new File([lastPdf.blob], lastPdf.name, { type: 'application/pdf' });
+  const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+  const kb = Math.round(lastPdf.blob.size / 1024);
+  const html = `<p class="dlg-text">${esc(lastPdf.name)} · ${kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'}</p>
+    <div class="pdf-actions">
+      ${canShare ? '<button type="button" class="primary" data-pdf="share">Teilen, drucken oder sichern</button>' : ''}
+      <a class="btn-like ${canShare ? '' : 'primary'}" data-pdf="download" href="${lastPdf.url}" download="${esc(lastPdf.name)}">PDF herunterladen</a>
+      <a class="btn-like" data-pdf="open" href="${lastPdf.url}" target="_blank" rel="noopener">PDF ansehen</a>
+      ${window.matchMedia('(hover: hover)').matches ? '<button type="button" class="ghost" data-pdf="print">Direkt drucken (Browser)</button>' : ''}
+    </div>
+    ${canShare ? '<p class="hint">Im Teilen-Menü findest du „Drucken“, „In Dateien sichern“ und Mail.</p>' : ''}`;
+  const dlg = $('dlg');
+  ask('PDF ist fertig', [], '', html);
+  $('dlgBody').querySelector('.pdf-actions').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-pdf]'); if (!t) return;
+    if (t.dataset.pdf === 'share') {
+      e.preventDefault();
+      try { await navigator.share({ files: [file], title: lastPdf.name }); dlg.close(); } catch (err) { if (err.name !== 'AbortError') console.warn(err); }
+    } else if (t.dataset.pdf === 'print') {
+      e.preventDefault(); dlg.close();
+      const prev = document.title; document.title = lastPdf.name.replace(/\.pdf$/, '');
+      window.print(); setTimeout(() => { document.title = prev; }, 500);
+    }
+  });
 }
 
 // ---------- Neu ----------
@@ -726,5 +791,5 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && !inPreview
 })();
 
 // Für Tests
-window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc };
+window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc, pdfData: () => pdfData(), get form() { return form; } };
 })();

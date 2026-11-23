@@ -1,12 +1,12 @@
 // Service Worker: App offline verfügbar machen. Bei jeder Änderung VERSION erhöhen.
-const VERSION = 'bewirtung-v4';
+const VERSION = 'bewirtung-v5';
 const CORE = [
-  './', 'index.html', 'css/app.css', 'js/app.js', 'js/receipt.js', 'js/plz.js', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'js/app.js', 'js/receipt.js', 'js/plz.js', 'js/pdf-export.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',
 ];
 const LAZY = [
   'vendor/tesseract.min.js', 'vendor/tess-worker.js', 'vendor/tess-core-simd.js', 'vendor/tess-core.js',
-  'vendor/tess-deu.js', 'vendor/pdf.min.js', 'vendor/pdf.worker.min.js',
+  'vendor/tess-deu.js', 'vendor/pdf.min.js', 'vendor/pdf.worker.min.js', 'vendor/jspdf.umd.min.js',
 ];
 
 self.addEventListener('install', (e) => {

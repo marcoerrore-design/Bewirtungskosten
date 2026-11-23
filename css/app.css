@@ -236,3 +236,5 @@ select { -webkit-appearance: none; appearance: none; padding-right: 32px;
 .install[hidden] { display: none; }
 .install span { flex: 1; min-width: 0; }
 [hidden] { display: none !important; }
+.pdf-actions { display: grid; gap: 8px; margin: 4px 0 8px; }
+.pdf-actions > * { width: 100%; min-height: 44px; text-decoration: none; }

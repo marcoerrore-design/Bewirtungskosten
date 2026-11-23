@@ -16,4 +16,5 @@ fs.writeFileSync('vendor/tess-core.js', wrap('core', fs.readFileSync(nm + 'tesse
 fs.writeFileSync('vendor/tess-deu.js', wrap('deu', fs.readFileSync(nm + '@tesseract.js-data/deu/4.0.0_best_int/deu.traineddata.gz').toString('base64')));
 fs.copyFileSync(nm + 'pdfjs-dist/legacy/build/pdf.min.js', 'vendor/pdf.min.js');
 fs.copyFileSync(nm + 'pdfjs-dist/legacy/build/pdf.worker.min.js', 'vendor/pdf.worker.min.js');
+fs.copyFileSync(nm + 'jspdf/dist/jspdf.umd.min.js', 'vendor/jspdf.umd.min.js');
 for (const f of fs.readdirSync('vendor')) console.log(f, (fs.statSync('vendor/' + f).size / 1e6).toFixed(2) + ' MB');
