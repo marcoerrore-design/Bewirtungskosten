@@ -238,3 +238,52 @@ select { -webkit-appearance: none; appearance: none; padding-right: 32px;
 [hidden] { display: none !important; }
 .pdf-actions { display: grid; gap: 8px; margin: 4px 0 8px; }
 .pdf-actions > * { width: 100%; min-height: 44px; text-decoration: none; }
+
+/* ---------- Übersicht, Schritte ---------- */
+.icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 20px; }
+.new-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 56px; margin: 4px 0 14px; border-radius: 14px; background: var(--accent); color: var(--accent-ink); border: 0; font-size: 17px; font-weight: 700; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+.new-btn span { font-size: 22px; line-height: 1; }
+.list-stats { color: var(--muted); font-size: 13px; margin: 0 2px 8px; font-variant-numeric: tabular-nums; }
+.report-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.report { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px; color: var(--ink); font-weight: 400; white-space: normal; }
+.report:active { background: var(--accent-soft); }
+.r-thumb { flex: 0 0 48px; height: 60px; border-radius: 8px; overflow: hidden; background: var(--bg); display: grid; place-items: center; font-size: 22px; border: 1px solid var(--line); }
+.r-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.r-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.r-main b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r-main small { color: var(--muted); font-size: 13px; }
+.r-sum { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pill { align-self: flex-start; margin-top: 2px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--warn-bg); color: var(--warn); }
+.pill.ok { background: color-mix(in srgb, #1a7f37 15%, var(--card)); color: color-mix(in srgb, #1a7f37 80%, var(--ink)); }
+.empty-list { display: grid; gap: 4px; padding: 28px 18px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); }
+.empty-list b { color: var(--ink); }
+
+.edit-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 25; display: flex; align-items: center; gap: 10px; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 6px; padding: 8px max(16px, env(safe-area-inset-left, 0px)); background: color-mix(in srgb, var(--bg) 90%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.back-btn { border: 0; background: none; color: var(--accent); padding: 8px 4px; font-size: 16px; }
+.save-state { flex: 1; text-align: right; color: var(--muted); font-size: 13px; }
+.edit-title { font-size: 22px; margin: 4px 0 12px; }
+.del-report { display: block; margin: 18px auto 8px; }
+.del-report[hidden] { display: none; }
+.row-actions.start { justify-content: flex-start; }
+
+.step { padding: 0; overflow: visible; }
+.step-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 16px; border: 0; background: none; color: var(--ink); text-align: left; font-weight: 400; white-space: normal; border-radius: 12px; }
+.step-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.step-title b { font-size: 16px; }
+.step-sum { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-chev { color: var(--muted); font-size: 22px; transition: transform .15s; }
+.step.open .step-chev { transform: rotate(90deg); }
+.step.done .num { background: #1a7f37; color: #fff; font-size: 0; }
+.step.done .num::after { content: "✓"; font-size: 13px; }
+.step-body { display: none; padding: 2px 16px 16px; }
+.step.open .step-body { display: block; }
+.step.open { box-shadow: 0 4px 16px rgba(0,0,0,.06); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.step-next { display: flex; justify-content: flex-end; margin-top: 14px; }
+.step-next button { min-width: 140px; }
+.num { flex: 0 0 auto; width: 26px; height: 26px; }
+@media (max-width: 600px) {
+  .only-wide { display: none; }
+  .step-next button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .step-chev { transition: none; } }
+.step-body > .combo { margin-bottom: 14px; }

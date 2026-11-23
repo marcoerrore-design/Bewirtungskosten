@@ -103,6 +103,7 @@ function selectLocation(p) {
   fillPlace(p);
   openLoc(false);
   updateLocState();
+  changed();
 }
 function updateLocState() {
   const p = selectedLocation();
@@ -244,7 +245,7 @@ function addGuest() {
   save();
   $('fGuestName').value = ''; $('fGuestCompany').value = '';
   $('fGuestName').focus();
-  renderChips(); renderGuestLists(); renderStamm();
+  renderChips(); renderGuestLists(); renderStamm(); changed();
 }
 
 // ---------- Beträge ----------
@@ -351,7 +352,7 @@ async function addFiles(files) {
     console.error(e);
     $('ocrStatus').textContent = 'Beleg konnte nicht gelesen werden: ' + (e.message || e);
   }
-  renderThumbs();
+  renderThumbs(); changed();
   if (form.pages.length) runOcr();
 }
 // pdf.js liefert Textstücke; zu Zeilen zusammensetzen (gleiche y-Position)
@@ -448,6 +449,7 @@ function applyParsed(r) {
     if (r.name || r.city) found.push('Ort');
   }
   updateAmounts();
+  changed();
   $('ocrStatus').textContent = found.length ? `✓ Erkannt: ${found.join(', ')}. Bitte prüfen.` : 'Nichts Sicheres erkannt – bitte Werte eintragen.';
 }
 
@@ -459,10 +461,20 @@ function initSignature() {
   const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * cv.width / r.width, (e.clientY - r.top) * cv.height / r.height]; };
   cv.addEventListener('pointerdown', (e) => { drawing = true; cv.setPointerCapture(e.pointerId); ctx.beginPath(); ctx.moveTo(...pos(e)); e.preventDefault(); });
   cv.addEventListener('pointermove', (e) => { if (!drawing) return; ctx.lineTo(...pos(e)); ctx.stroke(); dirty = true; });
-  const end = () => { if (drawing && dirty) form.signature = cv.toDataURL('image/png'); drawing = false; };
+  const end = () => { if (drawing && dirty) { form.signature = cv.toDataURL('image/png'); changed(); } drawing = false; };
   cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
-  $('btnSigClear').onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); form.signature = null; dirty = false; };
-  return () => $('btnSigClear').onclick();
+  const clear = () => { ctx.clearRect(0, 0, cv.width, cv.height); form.signature = null; dirty = false; };
+  $('btnSigClear').onclick = () => { clear(); changed(); };
+  return {
+    clear,
+    set(src) {
+      clear();
+      if (!src) return;
+      const img = new Image();
+      img.onload = () => { ctx.drawImage(img, 0, 0, cv.width, cv.height); };
+      img.src = src; form.signature = src; dirty = true;
+    },
+  };
 }
 
 // ---------- Druckansicht ----------
@@ -577,6 +589,7 @@ async function doPrint() {
     const blob = await window.PdfExport.build(d);
     if (lastPdf) URL.revokeObjectURL(lastPdf.url);
     lastPdf = { blob, name: d.fileName, url: URL.createObjectURL(blob) };
+    current.status = 'pdf'; current.pdfAt = Date.now(); await saveNow();
     showPdfReady();
   } catch (e) {
     console.error(e);
@@ -614,7 +627,7 @@ function showPdfReady() {
 }
 
 // ---------- Neu ----------
-let clearSig;
+let sig;
 function resetForm() {
   form = freshForm();
   for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee', 'fGuestName', 'fGuestCompany']) $(id).value = '';
@@ -622,17 +635,26 @@ function resetForm() {
   $('fSignPlace').value = store.settings.signPlace; $('fSignDate').value = todayIso();
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
   $('fileInput').value = '';
-  clearSig?.();
+  sig?.clear();
   renderThumbs(); renderChips(); updateAmounts();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0 });
 }
 
 // ---------- Export / Import ----------
-function exportStore() {
-  const blob = new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' });
+// Datei sichern: auf Handy/Tablet über das Teilen-Menü („In Dateien sichern“), sonst als Download
+async function saveFile(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  const touch = window.matchMedia('(hover: none)').matches;
+  if (touch && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return true; } catch (e) { if (e.name === 'AbortError') return false; }
+  }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `bewirtung-stammdaten-${todayIso()}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+function exportStore() {
+  saveFile(new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' }), `bewirtung-stammdaten-${todayIso()}.json`);
 }
 async function importStore(file) {
   try {
@@ -666,7 +688,7 @@ function bind() {
     const b = e.target.closest('button[data-i]'); if (!b) return;
     form.pages.splice(Number(b.dataset.i), 1);
     if (!form.pages.length) form.pdfText = '';
-    renderThumbs();
+    renderThumbs(); changed();
   });
   $('btnOcr').onclick = runOcr;
 
@@ -706,7 +728,7 @@ function bind() {
     if (!v || !v[0]) return;
     const h = { id: uid(), name: v[0], role: v[1] };
     store.hosts.push(h); store.settings.lastHostId = h.id; save();
-    renderHosts(); $('fHost').value = h.id; renderStamm();
+    renderHosts(); $('fHost').value = h.id; renderStamm(); changed();
   };
   $('btnAddGuest').onclick = addGuest;
   for (const id of ['fGuestName', 'fGuestCompany']) $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addGuest(); } });
@@ -716,13 +738,13 @@ function bind() {
   });
   $('guestChips').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-i]'); if (!b) return;
-    form.guests.splice(Number(b.dataset.i), 1); renderChips();
+    form.guests.splice(Number(b.dataset.i), 1); renderChips(); changed();
   });
   $('btnAddOccasion').onclick = async () => {
     const v = await ask('Anlass hinzufügen', [{ label: 'Anlass', required: true }]);
     if (!v || !v[0]) return;
     if (!store.occasions.includes(v[0])) store.occasions.push(v[0]);
-    save(); renderOccasions(); $('fOccasion').value = v[0]; renderStamm();
+    save(); renderOccasions(); $('fOccasion').value = v[0]; renderStamm(); changed();
   };
 
   document.querySelectorAll('.amt').forEach((el) => {
@@ -745,9 +767,220 @@ function bind() {
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importStore(e.target.files[0]); e.target.value = ''; });
 
   $('btnPrint').onclick = doPrint; $('btnPrint2').onclick = doPrint;
-  $('btnNew').onclick = async () => { if ((!form.pages.length && !form.guests.length) || await confirmDlg('Neue Abrechnung', 'Aktuelle Abrechnung verwerfen und neu beginnen?', 'Neu beginnen')) resetForm(); };
+  $('btnNew').onclick = () => newReport();
+  $('btnBack').onclick = async () => { await saveNow(); showList(); };
+  $('btnSettings').onclick = () => showView('viewSettings');
+  $('btnSettingsBack').onclick = () => showList();
+  $('btnDeleteReport').onclick = deleteReport;
+  $('btnBackup').onclick = backupAll;
+  $('restoreFile').addEventListener('change', (e) => { if (e.target.files[0]) restoreAll(e.target.files[0]); e.target.value = ''; });
+  $('reportList').addEventListener('click', (e) => { const li = e.target.closest('[data-id]'); if (li) openReport(li.dataset.id); });
+  document.querySelectorAll('.step-head').forEach((h) => h.addEventListener('click', () => {
+    const n = Number(h.closest('.step').dataset.step);
+    openStep(openStepNo === n ? 0 : n);
+  }));
+  document.querySelectorAll('[data-next]').forEach((b) => b.addEventListener('click', () => openStep(Number(b.dataset.next), true)));
+  $('viewEdit').addEventListener('input', (e) => { if (!/^fGuest/.test(e.target.id)) changed(); });
+  $('viewEdit').addEventListener('change', (e) => { if (!/^fGuest/.test(e.target.id)) changed(); });
   window.addEventListener('beforeprint', () => { if (!$('print').innerHTML) buildPrint(); });
   window.addEventListener('afterprint', () => { $('print').innerHTML = ''; });
+}
+
+// ---------- Abrechnungen speichern (IndexedDB) ----------
+const FIELD_IDS = ['fDate', 'fPlaceType', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'fHost', 'fOccasion', 'fOccasionNote',
+  'a19', 'a7', 'a0', 'aTip', 'aFee', 'fSignPlace', 'fSignDate'];
+const CHECK_IDS = ['fHostAttends', 'fFeeFull'];
+const CUR_KEY = 'bewirtung.currentReport';
+let current = null; // { id, createdAt, status }
+let saveTimer = null, restoring = false;
+const Reports = window.Reports;
+
+function newCurrent() { return { id: 'r' + Date.now().toString(36) + uid(), createdAt: Date.now(), status: 'entwurf' }; }
+function collectReport() {
+  const fields = {}, checks = {};
+  for (const id of FIELD_IDS) fields[id] = $(id).value;
+  for (const id of CHECK_IDS) checks[id] = $(id).checked;
+  const c = calc();
+  return {
+    ...current, updatedAt: Date.now(), fields, checks,
+    guests: form.guests, pages: form.pages, pdfText: form.pdfText, signature: form.signature,
+    ocrTotal: form.ocrTotal, locationId: form.locationId, rawText: $('rawText').textContent,
+    summary: { date: fields.fDate, place: fields.fLocation, city: fields.fCity, gross: c.gross, guests: form.guests.length,
+      host: store.hosts.find((h) => h.id === fields.fHost)?.name || '' },
+  };
+}
+function isEmptyReport(r) {
+  return !r.pages.length && !r.guests.length && !r.signature && !r.fields.fDate && !r.fields.fLocation && !r.summary.gross && !r.fields.fOccasion;
+}
+function changed() {
+  if (restoring || !current) return;
+  updateSummaries();
+  $('saveState').textContent = 'Speichert …';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 600);
+}
+async function saveNow() {
+  clearTimeout(saveTimer);
+  if (!current || !Reports) return;
+  const r = collectReport();
+  if (isEmptyReport(r) && !current.saved) { $('saveState').textContent = ''; return; }
+  try {
+    await Reports.put(r);
+    current.saved = true;
+    try { localStorage.setItem(CUR_KEY, current.id); } catch {}
+    $('saveState').textContent = '✓ Gespeichert';
+  } catch (e) {
+    console.error(e);
+    $('saveState').textContent = 'Nicht gespeichert – Speicher voll?';
+  }
+}
+// iPhone beendet Web-Apps im Hintergrund: beim Verlassen sofort sichern
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
+window.addEventListener('pagehide', () => { saveNow(); });
+
+function showView(id) {
+  for (const v of document.querySelectorAll('.view')) v.hidden = v.id !== id;
+  window.scrollTo({ top: 0 });
+}
+async function showList() {
+  current = null;
+  try { localStorage.removeItem(CUR_KEY); } catch {}
+  showView('viewList');
+  await renderReportList();
+}
+async function renderReportList() {
+  let all = [];
+  try { all = Reports ? await Reports.all() : []; } catch (e) { console.error(e); }
+  all.sort((a, b) => (b.fields?.fDate || '').localeCompare(a.fields?.fDate || '') || b.updatedAt - a.updatedAt);
+  const year = String(new Date().getFullYear());
+  const thisYear = all.filter((r) => (r.fields?.fDate || '').startsWith(year));
+  $('listStats').textContent = all.length
+    ? `${all.length} Abrechnung${all.length === 1 ? '' : 'en'} · ${year}: ${eur.format(thisYear.reduce((s, r) => s + (r.summary?.gross || 0), 0))}`
+    : '';
+  $('reportList').innerHTML = all.length ? all.map((r) => {
+    const s = r.summary || {};
+    const thumb = r.pages?.[0]?.src;
+    const done = r.status === 'pdf';
+    return `<li><button type="button" class="report" data-id="${r.id}">
+      <span class="r-thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span aria-hidden="true">🧾</span>'}</span>
+      <span class="r-main">
+        <b>${esc(s.place || 'Ohne Location')}</b>
+        <small>${s.date ? esc(deDate(s.date)) : 'ohne Datum'}${s.city ? ' · ' + esc(s.city) : ''}${s.guests ? ` · ${s.guests} Gast${s.guests === 1 ? '' : 'e'}` : ''}</small>
+        <span class="pill ${done ? 'ok' : ''}">${done ? 'PDF erstellt' : 'Entwurf'}</span>
+      </span>
+      <span class="r-sum">${s.gross ? eur.format(s.gross) : '–'}</span>
+    </button></li>`;
+  }).join('') : `<li class="empty-list"><b>Noch keine Abrechnungen</b><span>Tippe auf „Neue Abrechnung“ und fotografiere den Beleg. Alles wird automatisch auf diesem Gerät gespeichert.</span></li>`;
+}
+function newReport() {
+  resetForm();
+  current = newCurrent();
+  $('editTitle').textContent = 'Neue Abrechnung';
+  $('saveState').textContent = '';
+  $('btnDeleteReport').hidden = true;
+  showView('viewEdit');
+  updateSummaries();
+  openStep(1);
+}
+async function openReport(id) {
+  let r = null;
+  try { r = await Reports.get(id); } catch {}
+  if (!r) return showList();
+  restoring = true;
+  resetForm();
+  current = { id: r.id, createdAt: r.createdAt, status: r.status || 'entwurf', saved: true };
+  for (const fid of FIELD_IDS) if (r.fields && fid in r.fields) $(fid).value = r.fields[fid];
+  for (const cid of CHECK_IDS) if (r.checks && cid in r.checks) $(cid).checked = r.checks[cid];
+  form.guests = r.guests || []; form.pages = r.pages || []; form.pdfText = r.pdfText || '';
+  form.ocrTotal = r.ocrTotal ?? null; form.locationId = r.locationId || null; form.autoCity = false;
+  sig.set(r.signature || null);
+  if (r.rawText) { $('rawText').textContent = r.rawText; $('rawBox').hidden = false; }
+  renderThumbs(); renderChips(); updateAmounts(); updateLocState();
+  restoring = false;
+  try { localStorage.setItem(CUR_KEY, r.id); } catch {}
+  $('editTitle').textContent = 'Abrechnung bearbeiten';
+  $('saveState').textContent = '✓ Gespeichert';
+  $('btnDeleteReport').hidden = false;
+  showView('viewEdit');
+  updateSummaries();
+  openStep(firstOpenStep());
+}
+async function deleteReport() {
+  if (!current) return;
+  if (!(await confirmDlg('Abrechnung löschen', 'Diese Abrechnung mit allen Belegen endgültig von diesem Gerät löschen?', 'Löschen'))) return;
+  clearTimeout(saveTimer);
+  try { await Reports.remove(current.id); } catch {}
+  showList();
+}
+async function startup() {
+  Reports?.persist();
+  let id = null;
+  try { id = localStorage.getItem(CUR_KEY); } catch {}
+  if (id) await openReport(id); else await showList();
+}
+
+// ---------- Schritte ----------
+let openStepNo = 0;
+function openStep(n, scroll) {
+  openStepNo = n;
+  for (const s of document.querySelectorAll('.step')) {
+    const on = Number(s.dataset.step) === n;
+    s.classList.toggle('open', on);
+    s.querySelector('.step-head').setAttribute('aria-expanded', String(on));
+  }
+  const el = document.querySelector(`.step[data-step="${n}"]`);
+  if (el && scroll) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+}
+function stepState() {
+  const host = store.hosts.find((h) => h.id === $('fHost').value);
+  const c = calc();
+  const occ = $('fOccasion').value;
+  return {
+    1: { done: form.pages.length > 0, sum: form.pages.length ? `${form.pages.length} Seite${form.pages.length === 1 ? '' : 'n'}` : 'Foto oder PDF hinzufügen' },
+    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
+    3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} Gast${form.guests.length === 1 ? '' : 'e'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
+    4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },
+    5: { done: !!form.signature, sum: form.signature ? `unterschrieben${$('fSignPlace').value ? ', ' + $('fSignPlace').value : ''}` : 'optional, sonst von Hand' },
+  };
+}
+function updateSummaries() {
+  const st = stepState();
+  for (const [n, s] of Object.entries(st)) {
+    const el = document.querySelector(`.step[data-step="${n}"]`);
+    if (!el) continue;
+    el.classList.toggle('done', s.done);
+    $('sum' + n).textContent = s.sum;
+  }
+}
+function firstOpenStep() {
+  const st = stepState();
+  for (const n of [1, 2, 3, 4]) if (!st[n].done) return n;
+  return 0;
+}
+
+// ---------- Komplett-Backup ----------
+async function backupAll() {
+  $('backupStatus').textContent = 'Backup wird erstellt …';
+  try {
+    if (current) await saveNow();
+    const reports = await Reports.all();
+    const data = { app: 'bewirtungskosten', version: 1, exportedAt: new Date().toISOString(), store, reports };
+    const ok = await saveFile(new Blob([JSON.stringify(data)], { type: 'application/json' }), `bewirtung-backup-${todayIso()}.json`);
+    $('backupStatus').textContent = ok ? `✓ Backup mit ${reports.length} Abrechnung${reports.length === 1 ? '' : 'en'} erstellt.` : '';
+  } catch (e) { $('backupStatus').textContent = 'Backup fehlgeschlagen: ' + (e.message || e); }
+}
+async function restoreAll(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    if (data.store) await importStore(new File([JSON.stringify(data.store)], 's.json'));
+    else if (!data.reports) { await importStore(file); return; }
+    let n = 0;
+    for (const r of data.reports || []) {
+      const have = await Reports.get(r.id);
+      if (!have || (r.updatedAt || 0) > (have.updatedAt || 0)) { await Reports.put(r); n++; }
+    }
+    $('backupStatus').textContent = `✓ Backup eingespielt: ${n} Abrechnung${n === 1 ? '' : 'en'} übernommen.`;
+  } catch (e) { $('backupStatus').textContent = 'Das ist keine gültige Backup-Datei.'; }
 }
 
 // ---------- Start ----------
@@ -755,11 +988,12 @@ renderCountry();
 loadSettings();
 renderAll();
 bind();
-clearSig = initSignature();
+sig = initSignature();
 $('fDate').value = '';
 $('fSignDate').value = todayIso();
 $('fSignPlace').value = store.settings.signPlace;
 updateAmounts();
+startup();
 // Bekannte Orte in den PLZ-Cache übernehmen
 for (const p of store.places) remember(p.country, p.zip, p.city);
 
@@ -791,5 +1025,5 @@ if ('serviceWorker' in navigator && location.protocol === 'https:' && !inPreview
 })();
 
 // Für Tests
-window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc, pdfData: () => pdfData(), get form() { return form; } };
+window.__bewirtung = { parseReceipt, applyParsed, buildPrint, calc, pdfData: () => pdfData(), saveNow: () => saveNow(), get form() { return form; }, get current() { return current; } };
 })();

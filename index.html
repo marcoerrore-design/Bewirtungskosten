@@ -18,15 +18,14 @@
 </head>
 <body>
 <main class="app" id="app">
+<!-- Übersicht -->
+<div class="view" id="viewList">
   <header class="top">
     <div>
-      <h1>Bewirtungskosten</h1>
-      <p class="sub">Beleg nach § 4 Abs. 5 Satz 1 Nr. 2 EStG</p>
+      <h1>Bewirtungen</h1>
+      <p class="sub">Belege nach § 4 Abs. 5 Satz 1 Nr. 2 EStG</p>
     </div>
-    <div class="top-actions">
-      <button type="button" class="ghost" id="btnNew">Neu</button>
-      <button type="button" class="primary" id="btnPrint">PDF erstellen</button>
-    </div>
+    <button type="button" class="icon-btn" id="btnSettings" aria-label="Einstellungen und Stammdaten">⚙︎</button>
   </header>
 
   <div class="install" id="installBar" hidden>
@@ -35,9 +34,27 @@
     <button type="button" class="small ghost" id="btnInstallClose" aria-label="Hinweis schließen">×</button>
   </div>
 
-  <!-- 1. Beleg -->
-  <section class="card" id="secReceipt">
-    <h2><span class="num">1</span> Beleg</h2>
+  <button type="button" class="new-btn" id="btnNew"><span aria-hidden="true">＋</span> Neue Abrechnung</button>
+  <div class="list-stats" id="listStats"></div>
+  <ul class="report-list" id="reportList"></ul>
+</div>
+
+<!-- Abrechnung -->
+<div class="view" id="viewEdit" hidden>
+  <header class="edit-top">
+    <button type="button" class="back-btn" id="btnBack">‹ Übersicht</button>
+    <span class="save-state" id="saveState"></span>
+    <button type="button" class="primary small only-wide" id="btnPrint">PDF erstellen</button>
+  </header>
+  <h1 class="edit-title" id="editTitle">Neue Abrechnung</h1>
+
+  <section class="card step" data-step="1">
+    <button type="button" class="step-head" aria-expanded="false">
+      <span class="num">1</span>
+      <span class="step-title"><b>Beleg</b><small class="step-sum" id="sum1"></small></span>
+      <span class="step-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="step-body">
     <div class="drop" id="drop">
       <div class="drop-buttons">
         <label class="btn-like primary" for="camInput">📷 Beleg fotografieren</label>
@@ -57,11 +74,16 @@
       <summary>Erkannter Text</summary>
       <pre id="rawText"></pre>
     </details>
+      <div class="step-next"><button type="button" class="primary" data-next="2">Weiter</button></div>
+    </div>
   </section>
-
-  <!-- 2. Tag & Ort -->
-  <section class="card">
-    <h2><span class="num">2</span> Tag und Ort der Bewirtung</h2>
+  <section class="card step" data-step="2">
+    <button type="button" class="step-head" aria-expanded="false">
+      <span class="num">2</span>
+      <span class="step-title"><b>Tag und Ort</b><small class="step-sum" id="sum2"></small></span>
+      <span class="step-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="step-body">
     <div class="grid g2">
       <label>Tag der Bewirtung<input type="date" id="fDate" required></label>
       <label>Art
@@ -94,11 +116,16 @@
       <button type="button" class="ghost small danger" id="btnDelPlace" hidden>Location löschen</button>
       <button type="button" class="small" id="btnSavePlace">Location speichern</button>
     </div>
+      <div class="step-next"><button type="button" class="primary" data-next="3">Weiter</button></div>
+    </div>
   </section>
-
-  <!-- 3. Teilnehmer & Anlass -->
-  <section class="card">
-    <h2><span class="num">3</span> Teilnehmer und Anlass</h2>
+  <section class="card step" data-step="3">
+    <button type="button" class="step-head" aria-expanded="false">
+      <span class="num">3</span>
+      <span class="step-title"><b>Teilnehmer und Anlass</b><small class="step-sum" id="sum3"></small></span>
+      <span class="step-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="step-body">
     <label>Gastgeber
       <div class="combo">
         <select id="fHost"></select>
@@ -124,11 +151,16 @@
       </div>
     </label>
     <label>Ergänzung zum Anlass (optional)<input id="fOccasionNote" placeholder="z. B. Projekt Müller GmbH, Vertragsverlängerung 2027"></label>
+      <div class="step-next"><button type="button" class="primary" data-next="4">Weiter</button></div>
+    </div>
   </section>
-
-  <!-- 4. Beträge -->
-  <section class="card">
-    <h2><span class="num">4</span> Höhe der Aufwendungen</h2>
+  <section class="card step" data-step="4">
+    <button type="button" class="step-head" aria-expanded="false">
+      <span class="num">4</span>
+      <span class="step-title"><b>Beträge</b><small class="step-sum" id="sum4"></small></span>
+      <span class="step-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="step-body">
     <p class="hint">Aus dem Beleg vorbelegt, jederzeit änderbar. Eingabe als Bruttobetrag.</p>
     <table class="amounts">
       <thead><tr><th></th><th>Brutto</th><th>Netto</th><th>MwSt</th></tr></thead>
@@ -146,11 +178,16 @@
     <label class="check"><input type="checkbox" id="fFeeFull"> Auslandseinsatzentgelt als Bankgebühr voll abziehen (nicht in die 70/30-Aufteilung)</label>
     <div class="split" id="split"></div>
     <p class="warn" id="sumWarn" hidden></p>
+      <div class="step-next"><button type="button" class="primary" data-next="5">Weiter</button></div>
+    </div>
   </section>
-
-  <!-- 5. Unterschrift -->
-  <section class="card">
-    <h2><span class="num">5</span> Ort, Datum, Unterschrift des Gastgebers</h2>
+  <section class="card step" data-step="5">
+    <button type="button" class="step-head" aria-expanded="false">
+      <span class="num">5</span>
+      <span class="step-title"><b>Unterschrift</b><small class="step-sum" id="sum5"></small></span>
+      <span class="step-chev" aria-hidden="true">›</span>
+    </button>
+    <div class="step-body">
     <div class="grid g2">
       <label>Ort<input id="fSignPlace" autocomplete="off"></label>
       <label>Datum<input type="date" id="fSignDate"></label>
@@ -162,12 +199,23 @@
         <button type="button" class="ghost small" id="btnSigClear">Löschen</button>
       </div>
     </div>
+    </div>
   </section>
 
-  <!-- Stammdaten -->
+  <button type="button" class="ghost danger del-report" id="btnDeleteReport">Abrechnung löschen</button>
+
+  <div class="bottom-actions">
+    <button type="button" class="primary" id="btnPrint2">Abrechnung als PDF erstellen</button>
+  </div>
+</div>
+
+<!-- Einstellungen -->
+<div class="view" id="viewSettings" hidden>
+  <header class="edit-top">
+    <button type="button" class="back-btn" id="btnSettingsBack">‹ Übersicht</button>
+  </header>
+  <h1 class="edit-title">Einstellungen und Stammdaten</h1>
   <section class="card">
-    <details>
-      <summary><h2 class="inline">Einstellungen und Stammdaten</h2></summary>
       <label>Firma (erscheint im Kopf der Abrechnung)<input id="sCompany" autocomplete="organization"></label>
       <label>Standard-Ort für die Unterschrift<input id="sSignPlace"></label>
       <div class="stamm" id="stammLists"></div>
@@ -176,12 +224,17 @@
         <label class="ghost small file-btn">Importieren<input type="file" id="importFile" accept="application/json"></label>
       </div>
       <p class="hint">Alle Daten bleiben in diesem Browser. Belege werden nicht hochgeladen, die Texterkennung läuft lokal.</p>
-    </details>
   </section>
-
-  <div class="bottom-actions">
-    <button type="button" class="primary" id="btnPrint2">Abrechnung als PDF erstellen</button>
-  </div>
+  <section class="card">
+    <h2>Datensicherung</h2>
+    <p class="hint">Sichert alle Abrechnungen mit Belegen, Unterschriften und Stammdaten in eine Datei, z. B. in iCloud Drive. Damit kannst du die Daten auf ein anderes Gerät übertragen.</p>
+    <div class="row-actions start">
+      <button type="button" class="small" id="btnBackup">Komplett-Backup erstellen</button>
+      <label class="ghost small file-btn">Backup einspielen<input type="file" id="restoreFile" accept="application/json,.json"></label>
+    </div>
+    <p class="status" id="backupStatus"></p>
+  </section>
+</div>
 </main>
 
 <!-- Druckansicht -->
@@ -200,6 +253,7 @@
 
 <script src="js/receipt.js"></script>
 <script src="js/plz.js"></script>
+<script src="js/db.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
