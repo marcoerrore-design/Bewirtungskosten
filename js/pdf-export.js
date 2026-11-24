@@ -179,6 +179,24 @@ async function build(d) {
       if (v.rate.night) { doc.text('Zur Information: Übernachtungspauschale', M, y); doc.text(money(v.rate.night), R, y, { align: 'right' }); y += 5; }
     }
 
+    // Zur Information: durchschnittlicher Verzehr je teilnehmender Person
+    if (d.persons > 0) {
+      const food = c.line[19].gross + c.line[7].gross + c.line[0].gross;
+      y += 4;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); ink(); doc.text('Zur Information: Verzehr je Person', M, y); y += 2; line(y, 0.3, 0); y += 5;
+      doc.setFontSize(10);
+      const info = [
+        ['Teilnehmende Personen', d.participants],
+        ['Speisen und Getränke gesamt (brutto)', money(food)],
+        ['Durchschnitt je Person', money(food / d.persons), true],
+      ];
+      if (c.tip) info.push(['Durchschnitt je Person einschließlich Trinkgeld', money((food + c.tip) / d.persons)]);
+      for (const [l, val, b] of info) {
+        doc.setFont('helvetica', b ? 'bold' : 'normal'); ink();
+        doc.text(l, M, y); doc.text(val, R, y, { align: 'right' }); y += 1.8; line(y, 0.15, 210); y += 4.4;
+      }
+    }
+
     y += 4; doc.setFontSize(8.8); muted(); doc.setFont('helvetica', 'normal');
     const hints = [
       'Die Kürzung beträgt für ein Frühstück 20 % und für ein Mittag- oder Abendessen je 40 % der Pauschale für eine 24-stündige Abwesenheit an dem Ort, an dem die Mahlzeit stattfindet. Sie gilt auch an An- und Abreisetagen.',

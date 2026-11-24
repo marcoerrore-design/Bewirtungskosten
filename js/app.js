@@ -598,6 +598,7 @@ function pdfData() {
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
     guests: form.guests,
+    persons: n,
     participants: `${n} Person${n === 1 ? '' : 'en'}${hostAttends ? ' (einschließlich Gastgeber)' : ''}`,
     occasion: [$('fOccasion').value, $('fOccasionNote').value.trim()].filter(Boolean).join(' – '),
     calc: c,
