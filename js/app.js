@@ -844,10 +844,12 @@ function bind() {
   $('btnPrint').onclick = doPrint; $('btnPrint2').onclick = doPrint;
   $('btnNew').onclick = () => newReport();
   $('btnBack').onclick = async () => { await saveNow(); showList(); };
-  $('btnSettings').onclick = () => showView('viewSettings');
+  $('btnSettings').onclick = () => { showView('viewSettings'); renderYears(); };
+  $('btnYearBackup').onclick = () => backupAll($('delYear').value);
+  $('btnDelYear').onclick = deleteYear;
   $('btnSettingsBack').onclick = () => showList();
   $('btnDeleteReport').onclick = deleteReport;
-  $('btnBackup').onclick = backupAll;
+  $('btnBackup').onclick = () => backupAll();
   $('restoreFile').addEventListener('change', (e) => { if (e.target.files[0]) restoreAll(e.target.files[0]); e.target.value = ''; });
   $('reportList').addEventListener('click', (e) => { const li = e.target.closest('[data-id]'); if (li) openReport(li.dataset.id); });
   document.querySelectorAll('.step-head').forEach((h) => h.addEventListener('click', () => {
@@ -1037,15 +1039,62 @@ function firstOpenStep() {
 }
 
 // ---------- Komplett-Backup ----------
-async function backupAll() {
-  $('backupStatus').textContent = 'Backup wird erstellt …';
+// year: undefined = alles, '' = ohne Datum, '2025' = nur dieses Jahr
+const yearOf = (r) => (r.fields?.fDate || '').slice(0, 4);
+const yearName = (y) => y || 'ohne Datum';
+async function backupAll(year) {
+  const one = typeof year === 'string';
+  const st = one ? $('delYearStatus') : $('backupStatus');
+  st.textContent = 'Backup wird erstellt …';
   try {
     if (current) await saveNow();
-    const reports = await Reports.all();
+    let reports = await Reports.all();
+    if (one) reports = reports.filter((r) => yearOf(r) === year);
     const data = { app: 'bewirtungskosten', version: 1, exportedAt: new Date().toISOString(), store, reports };
-    const ok = await saveFile(new Blob([JSON.stringify(data)], { type: 'application/json' }), `bewirtung-backup-${todayIso()}.json`);
-    $('backupStatus').textContent = ok ? `✓ Backup mit ${reports.length} Abrechnung${reports.length === 1 ? '' : 'en'} erstellt.` : '';
-  } catch (e) { $('backupStatus').textContent = 'Backup fehlgeschlagen: ' + (e.message || e); }
+    const name = `bewirtung-backup-${one ? (year || 'ohne-datum') + '-' : ''}${todayIso()}.json`;
+    const ok = await saveFile(new Blob([JSON.stringify(data)], { type: 'application/json' }), name);
+    st.textContent = ok ? `✓ Backup mit ${reports.length} Abrechnung${reports.length === 1 ? '' : 'en'}${one ? ' (' + yearName(year) + ')' : ''} erstellt.` : '';
+    if (ok && one) lastYearBackup = year;
+  } catch (e) { st.textContent = 'Backup fehlgeschlagen: ' + (e.message || e); }
+}
+let lastYearBackup = null;
+async function renderYears() {
+  let all = [];
+  try { all = await Reports.all(); } catch {}
+  const counts = {};
+  for (const r of all) { const y = yearOf(r); counts[y] = (counts[y] || 0) + 1; }
+  const years = Object.keys(counts).sort((a, b) => (b || '0').localeCompare(a || '0'));
+  const sel = $('delYear'), keep = sel.value;
+  sel.innerHTML = years.length
+    ? years.map((y) => `<option value="${esc(y)}">${esc(yearName(y))} (${counts[y]})</option>`).join('')
+    : '<option value="" disabled>keine Abrechnungen</option>';
+  if (years.includes(keep)) sel.value = keep;
+  $('btnDelYear').disabled = $('btnYearBackup').disabled = !years.length;
+}
+async function deleteYear() {
+  const year = $('delYear').value;
+  let list = [];
+  try { list = (await Reports.all()).filter((r) => yearOf(r) === year); } catch {}
+  if (!list.length) return;
+  const sum = list.reduce((s, r) => s + (r.summary?.gross || 0), 0);
+  const label = yearName(year);
+  const confirmWord = year || 'LÖSCHEN';
+  const html = `<p class="dlg-text">${list.length} Abrechnung${list.length === 1 ? '' : 'en'} aus <b>${esc(label)}</b> (zusammen ${eur.format(sum)}) werden mit allen Belegen und Unterschriften endgültig von diesem Gerät gelöscht. Das kann nicht rückgängig gemacht werden.</p>
+    <p class="dlg-text">Stammdaten, Gastgeber, bewirtete Personen, Locations und Anlässe bleiben erhalten.</p>
+    ${lastYearBackup === year ? '<p class="dlg-text">✓ Ein Backup dieses Jahres wurde gerade erstellt.</p>' : '<p class="dlg-text warn-text">Für dieses Jahr wurde in dieser Sitzung noch kein Backup erstellt. Bitte vorher „Backup dieses Jahres“ tippen.</p>'}
+    <p class="dlg-text">Zur Bestätigung bitte <b>${esc(confirmWord)}</b> eingeben:</p>`;
+  const v = await ask('Abrechnungen löschen', [{ label: 'Bestätigung' }], 'Endgültig löschen', html);
+  if (v === null) return;
+  if ((v[0] || '').toUpperCase() !== confirmWord.toUpperCase()) { $('delYearStatus').textContent = 'Nicht gelöscht: Die Bestätigung stimmte nicht.'; return; }
+  let curId = null;
+  try { curId = localStorage.getItem(CUR_KEY); } catch {}
+  let n = 0;
+  for (const r of list) { try { await Reports.remove(r.id); n++; } catch (e) { console.error(e); } }
+  if (current && list.some((r) => r.id === current.id)) { clearTimeout(saveTimer); current = null; }
+  if (curId && list.some((r) => r.id === curId)) { try { localStorage.removeItem(CUR_KEY); } catch {} }
+  $('delYearStatus').textContent = `✓ ${n} Abrechnung${n === 1 ? '' : 'en'} aus ${label} gelöscht.`;
+  await renderYears();
+  await renderReportList();
 }
 async function restoreAll(file) {
   try {
