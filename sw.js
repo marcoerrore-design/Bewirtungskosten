@@ -1,5 +1,5 @@
 // Service Worker: App offline verfügbar machen. Bei jeder Änderung VERSION erhöhen.
-const VERSION = 'bewirtung-v21';
+const VERSION = 'bewirtung-v22';
 const CORE = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/receipt.js', 'js/plz.js', 'js/db.js', 'js/vma.js', 'js/pdf-export.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',
@@ -38,9 +38,9 @@ self.addEventListener('fetch', (e) => {
       if (res.ok) c.put(e.request, res.clone());
       return res;
     }
-    // App-Dateien: erst Netz (immer aktuell), offline aus dem Cache
+    // App-Dateien: erst Netz (immer aktuell, am Browser-Cache vorbei), offline aus dem Cache
     try {
-      const res = await fetch(e.request);
+      const res = await fetch(new Request(url.href, { cache: 'no-cache' }));
       if (res.ok) c.put(e.request, res.clone());
       return res;
     } catch {
