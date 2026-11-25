@@ -361,3 +361,4 @@ button.all-emp { margin-top: 8px; width: 100%; }
 .mt-s { margin-top: 10px; }
 .li-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .stamm button.move { padding: 4px 8px; font-size: 12px; min-height: 32px; white-space: nowrap; }
+.app-version { text-align: center; margin: 18px 0 8px; }

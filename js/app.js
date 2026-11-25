@@ -1530,7 +1530,22 @@ for (const p of store.places) remember(p.country, p.zip, p.city);
 
 // Offline-Fähigkeit und Installation als App (nur über https, nicht per Doppelklick)
 if ('serviceWorker' in navigator && location.protocol === 'https:' && !inPreview) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('load', async () => {
+    let reg;
+    try { reg = await navigator.serviceWorker.register('sw.js'); } catch { return; }
+    // Installierte Apps werden auf dem iPhone oft nur fortgesetzt statt neu geladen:
+    // bei jeder Rückkehr in die App nach einem Update suchen und dann neu laden.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      saveNow().finally(() => location.reload());
+    });
+    const check = () => { reg.update().catch(() => {}); };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, 30 * 60 * 1000);
+  });
 }
 
 // Hinweis „Zum Home-Bildschirm“ (iPhone/iPad) bzw. Installieren-Knopf (Android/Chrome)
