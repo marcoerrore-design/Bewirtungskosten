@@ -215,8 +215,9 @@
     <button type="button" class="back-btn" id="btnSettingsBack">‹ Übersicht</button>
   </header>
   <h1 class="edit-title">Einstellungen und Stammdaten</h1>
-  <section class="card">
-      <h2>Firma</h2>
+  <details class="card fold" id="foldFirma">
+    <summary><span><b>Firma</b><small id="firmaSum">Logo, Name und Adresse</small></span></summary>
+    <div class="fold-body">
       <p class="hint">Erscheint im Kopf jeder Abrechnung.</p>
       <div class="logo-row">
         <div class="logo-box" id="logoBox"><span class="hint">Kein Logo</span></div>
@@ -233,13 +234,19 @@
         <label>PLZ<input id="sZip" inputmode="numeric" autocomplete="postal-code"></label>
         <label>Ort<input id="sCity" autocomplete="address-level2"></label>
       </div>
-      <h2 class="mt">Gespeicherte Listen</h2>
-      <div class="stamm" id="stammLists"></div>
-      <div class="row-actions">
-        <button type="button" class="ghost small" id="btnExport">Stammdaten exportieren</button>
-        <label class="ghost small file-btn">Importieren<input type="file" id="importFile" accept="application/json"></label>
-      </div>
-      <p class="hint">Alle Daten bleiben in diesem Browser. Belege werden nicht hochgeladen, die Texterkennung läuft lokal.</p>
+    </div>
+  </details>
+  <div class="stamm" id="stammLists"></div>
+  <section class="card">
+    <h2>Stammdaten als Excel-Datei (CSV)</h2>
+    <p class="hint">Alle Stammdaten (Firma, Gastgeber, bewirtete Personen, Locations und Anlässe) in einer Datei, die sich mit Excel öffnen und bearbeiten lässt. Beim Import werden neue Einträge ergänzt, vorhandene bleiben erhalten. Das Logo ist nicht enthalten.</p>
+    <div class="row-actions start">
+      <button type="button" class="small" id="btnExport">Als Excel (CSV) exportieren</button>
+      <label class="ghost small file-btn">Aus Excel (CSV) importieren<input type="file" id="importFile" accept=".csv,text/csv,application/json,.json,text/plain"></label>
+      <button type="button" class="ghost small" id="btnTemplate">Vorlage herunterladen</button>
+    </div>
+    <p class="status" id="csvStatus"></p>
+    <p class="hint">Alle Daten bleiben auf diesem Gerät. Belege werden nicht hochgeladen, die Texterkennung läuft lokal.</p>
   </section>
   <section class="card">
     <h2>Datensicherung</h2>

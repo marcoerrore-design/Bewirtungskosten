@@ -175,14 +175,21 @@ function renderChips() {
     ? form.guests.map((g, i) => `<span class="chip${g.company ? '' : ' warn-chip'}">${esc(g.name)}${g.company ? ` <small>${esc(g.company)}</small>` : ' <small>Firma fehlt</small>'}<button type="button" data-i="${i}" aria-label="entfernen">×</button></span>`).join('')
     : '<span class="hint">Noch keine Gäste eingetragen.</span>';
 }
+// Stammdaten in den Einstellungen: jede Liste einzeln aufklappbar (Zustand bleibt beim Neuzeichnen erhalten)
+const stammOpen = new Set();
 function renderStamm() {
   const block = (title, kind, items, label) => `
-    <div><h3>${title}</h3>${items.length ? `<ul>${items.map((x, i) => `<li><span>${label(x)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">leer</p>'}</div>`;
+    <details class="card fold" data-fold="${kind}" ${stammOpen.has(kind) ? 'open' : ''}>
+      <summary><span><b>${title}</b><small>${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}</small></span></summary>
+      <div class="fold-body">${items.length ? `<ul>${items.map((x, i) => `<li><span>${label(x)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">Noch keine Einträge.</p>'}</div>
+    </details>`;
   $('stammLists').innerHTML =
     block('Locations', 'places', store.places, (p) => `<button type="button" class="linkish" data-edit="${p.id}" title="bearbeiten">${esc(p.name)} ✎</button> <small>${esc(p.zip)} ${esc(p.city)}</small>`) +
     block('Gastgeber', 'hosts', store.hosts, (h) => `${esc(h.name)} <small>${esc(h.role || '')}</small>`) +
-    block('Gäste', 'guests', store.guests, (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`) +
+    block('Bewirtete Personen', 'guests', store.guests, (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`) +
     block('Anlässe', 'occasions', store.occasions, (o) => esc(o));
+  const f = store.settings;
+  if ($('firmaSum')) $('firmaSum').textContent = [f.company, f.city].filter(Boolean).join(', ') || 'Logo, Name und Adresse';
 }
 function renderAll() { updateLocState(); renderHosts(); renderOccasions(); renderGuestLists(); renderChips(); renderStamm(); }
 
@@ -303,7 +310,7 @@ function updateAmounts() {
   $('tNet').textContent = eur.format(c.net);
   $('tVat').textContent = eur.format(c.vat);
   $('split').innerHTML = `
-    ${c.foreign ? '<p class="hint">Ausländische Rechnung: die ausländische Umsatzsteuer ist hier nicht als Vorsteuer abziehbar und wird den Kosten zugerechnet.</p>' : ''}
+    ${c.foreign ? '<p class="hint">Ausländische Rechnung: Die ausländische Umsatzsteuer ist hier nicht als Vorsteuer abziehbar und wird den Kosten zugerechnet.</p>' : ''}
     <div><span>Vorsteuer</span><b>${eur.format(c.inputTax)}</b></div>
     <div><span>Betriebsausgabe abzugsfähig (70 %)</span><b>${eur.format(c.deductible)}</b></div>
     <div><span>nicht abzugsfähig (30 %)</span><b>${eur.format(c.nonDeductible)}</b></div>
@@ -691,21 +698,125 @@ async function saveFile(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   return true;
 }
+// ---------- Stammdaten als Excel-Datei (CSV) ----------
+// Eine Datei für alle Stammdaten; Spalte „Typ“ sagt, was die Zeile ist. Semikolon + UTF-8 mit BOM, damit Excel (DE) sie direkt öffnet.
+const CSV_COLS = ['Typ', 'Name', 'Firma', 'Funktion', 'Straße', 'PLZ', 'Ort', 'Land', 'Art'];
+const CSV_TYPES = { firma: 'Firma', gastgeber: 'Gastgeber', gast: 'Bewirtete Person', location: 'Location', anlass: 'Anlass' };
+const typeKey = (t) => {
+  const n = String(t || '').toLowerCase().replace(/[^a-zäöüß]/g, '');
+  if (/^(firma|unternehmen|company|eigenefirma)$/.test(n)) return 'firma';
+  if (/^(gastgeber|host)/.test(n)) return 'gastgeber';
+  if (/^(bewirteteperson(en)?|gast|gäste|gaeste|guests?|person(en)?)$/.test(n)) return 'gast';
+  if (/^(locations?|ort|orte|restaurant|hotel|place)$/.test(n)) return 'location';
+  if (/^(anlass|anlässe|anlaesse|occasions?)$/.test(n)) return 'anlass';
+  return '';
+};
+const csvCell = (v) => { v = String(v ?? ''); return /[;"\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+const csvText = (rows) => '﻿' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n') + '\r\n';
+const countryCode = (v) => {
+  const t = String(v || '').trim(); if (!t) return '';
+  const c = COUNTRIES.find((x) => x.code.toLowerCase() === t.toLowerCase() || x.name.toLowerCase() === t.toLowerCase());
+  return c ? c.code : t.toUpperCase().slice(0, 2);
+};
+function stammRows() {
+  const f = store.settings, rows = [CSV_COLS];
+  if (f.company || f.street || f.city) rows.push([CSV_TYPES.firma, f.company, '', '', f.street, f.zip, f.city, f.country || 'DE', '']);
+  for (const h of store.hosts) rows.push([CSV_TYPES.gastgeber, h.name, '', h.role || '', '', '', '', '', '']);
+  for (const g of store.guests) rows.push([CSV_TYPES.gast, g.name, g.company || '', '', '', '', '', '', '']);
+  for (const p of store.places) rows.push([CSV_TYPES.location, p.name, '', '', p.street, p.zip, p.city, p.country || 'DE', p.type || 'Restaurant']);
+  for (const o of store.occasions) rows.push([CSV_TYPES.anlass, o, '', '', '', '', '', '', '']);
+  return rows;
+}
 function exportStore() {
-  saveFile(new Blob([JSON.stringify(store, null, 2)], { type: 'application/json' }), `bewirtung-stammdaten-${todayIso()}.json`);
+  const rows = stammRows();
+  saveFile(new Blob([csvText(rows)], { type: 'text/csv;charset=utf-8' }), `bewirtung-stammdaten-${todayIso()}.csv`)
+    .then((ok) => { if (ok) $('csvStatus').textContent = `✓ ${rows.length - 1} Einträge exportiert.`; });
+}
+function downloadTemplate() {
+  const rows = [CSV_COLS,
+    ['# Vorlage: Zeilen mit # werden beim Import ignoriert. Beispielzeilen kopieren, # in der Spalte Typ entfernen und Werte ersetzen.'],
+    ['# Typ = Firma, Gastgeber, Bewirtete Person, Location oder Anlass. Land als Kürzel (DE, AT, CH …). Art = Restaurant, Hotel oder Sonstiges.'],
+    ['#Firma', 'Muster GmbH', '', '', 'Hauptstraße 1', '20095', 'Hamburg', 'DE', ''],
+    ['#Gastgeber', 'Erika Muster', '', 'Geschäftsführerin', '', '', '', '', ''],
+    ['#Bewirtete Person', 'Max Beispiel', 'Beispiel AG', '', '', '', '', '', ''],
+    ['#Location', 'Restaurant Beispiel', '', '', 'Marktplatz 3', '80331', 'München', 'DE', 'Restaurant'],
+    ['#Anlass', 'Projektbesprechung', '', '', '', '', '', '', ''],
+  ];
+  saveFile(new Blob([csvText(rows)], { type: 'text/csv;charset=utf-8' }), 'bewirtung-stammdaten-vorlage.csv');
+}
+function parseCsv(text) {
+  text = text.replace(/^﻿/, '');
+  const first = text.split(/\r?\n/)[0] || '';
+  const sep = [';', ',', '\t'].map((c) => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; continue; }
+    if (ch === '"') q = true;
+    else if (ch === sep) { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim()));
+}
+function importCsv(text) {
+  const rows = parseCsv(text);
+  if (!rows.length) throw new Error('leer');
+  const norm = (h) => h.toLowerCase().replace(/[^a-zäöüß]/g, '');
+  const head = rows[0].map(norm);
+  const col = (...names) => head.findIndex((h) => names.includes(h));
+  const ix = { typ: col('typ', 'type', 'art der daten'), name: col('name'), firma: col('firma', 'company', 'unternehmen'), funktion: col('funktion', 'rolle', 'role', 'position'),
+    strasse: col('straße', 'strasse', 'street', 'straßehausnummer'), plz: col('plz', 'postleitzahl', 'zip'), ort: col('ort', 'stadt', 'city'), land: col('land', 'country'), art: col('art', 'kategorie') };
+  if (ix.typ < 0 || ix.name < 0) throw new Error('Spalten „Typ“ und „Name“ fehlen');
+  const get = (r, k) => (ix[k] >= 0 ? String(r[ix[k]] ?? '').trim() : '');
+  const n = { firma: 0, gastgeber: 0, gast: 0, location: 0, anlass: 0 }; let skipped = 0;
+  for (const r of rows.slice(1)) {
+    const typRaw = String(r[ix.typ] ?? '').trim();
+    if (!typRaw || typRaw.startsWith('#')) continue;
+    const t = typeKey(typRaw), name = get(r, 'name');
+    if (!t || (!name && t !== 'firma')) { skipped++; continue; }
+    if (t === 'firma') {
+      const f = store.settings;
+      for (const [k, v] of [['company', name], ['street', get(r, 'strasse')], ['zip', get(r, 'plz')], ['city', get(r, 'ort')], ['country', countryCode(get(r, 'land'))]]) if (v) f[k] = v;
+      n.firma++;
+    } else if (t === 'gastgeber') {
+      const h = store.hosts.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (h) { if (get(r, 'funktion')) h.role = get(r, 'funktion'); } else { store.hosts.push({ id: uid(), name, role: get(r, 'funktion') }); n.gastgeber++; }
+    } else if (t === 'gast') {
+      const company = get(r, 'firma');
+      if (!store.guests.some((g) => g.name.toLowerCase() === name.toLowerCase() && (g.company || '').toLowerCase() === company.toLowerCase())) { store.guests.push({ name, company }); n.gast++; }
+    } else if (t === 'location') {
+      const p = { type: get(r, 'art') || 'Restaurant', name, street: get(r, 'strasse'), country: countryCode(get(r, 'land')) || 'DE', zip: get(r, 'plz'), city: get(r, 'ort') };
+      const ex = store.places.find((x) => x.name.toLowerCase() === name.toLowerCase() && (x.city || '').toLowerCase() === p.city.toLowerCase());
+      if (ex) { for (const k of Object.keys(p)) if (p[k]) ex[k] = p[k]; } else { store.places.push({ id: uid(), ...p }); n.location++; }
+      if (p.zip && p.city) remember(p.country, p.zip, p.city);
+    } else if (t === 'anlass') {
+      if (!store.occasions.some((o) => o.toLowerCase() === name.toLowerCase())) { store.occasions.push(name); n.anlass++; }
+    }
+  }
+  return { n, skipped };
 }
 async function importStore(file) {
+  const st = $('csvStatus');
   try {
-    const s = JSON.parse(await file.text());
-    const mergeBy = (a, b, key) => { for (const x of b || []) if (!a.some((y) => key(y) === key(x))) a.push(x); };
-    mergeBy(store.places, s.places, (p) => p.id || p.name + p.city);
-    mergeBy(store.hosts, s.hosts, (h) => h.id || h.name);
-    mergeBy(store.guests, s.guests, (g) => g.name + '|' + (g.company || ''));
-    for (const o of s.occasions || []) if (!store.occasions.includes(o)) store.occasions.push(o);
-    if (s.settings) store.settings = { ...s.settings, ...Object.fromEntries(Object.entries(store.settings).filter(([, v]) => v)) };
+    const text = await file.text();
+    if (/^\s*[{[]/.test(text.replace(/^﻿/, ''))) { importJson(JSON.parse(text)); st.textContent = '✓ Stammdaten importiert'; return; }
+    const { n, skipped } = importCsv(text);
     save(); renderAll(); loadSettings();
-    alertStatus('✓ Stammdaten importiert');
-  } catch { alertStatus('Import fehlgeschlagen: keine gültige Datei.'); }
+    const parts = [n.gastgeber && `${n.gastgeber} Gastgeber`, n.gast && `${n.gast} bewirtete Person${n.gast === 1 ? '' : 'en'}`, n.location && `${n.location} Location${n.location === 1 ? '' : 's'}`, n.anlass && `${n.anlass} Anlass${n.anlass === 1 ? '' : 'e'}`.replace('Anlasse', 'Anlässe'), n.firma && 'Firmendaten'].filter(Boolean);
+    st.textContent = (parts.length ? `✓ Importiert: ${parts.join(', ')}.` : 'Keine neuen Einträge gefunden.') + (skipped ? ` ${skipped} Zeile${skipped === 1 ? '' : 'n'} übersprungen (Typ unbekannt oder Name fehlt).` : '');
+  } catch (e) { st.textContent = 'Import fehlgeschlagen: ' + (e.message && e.message !== 'leer' ? e.message : 'keine gültige Datei') + '.'; }
+}
+// Älteres JSON-Format (und Komplett-Backup) weiterhin lesbar
+function importJson(s) {
+  const mergeBy = (a, b, key) => { for (const x of b || []) if (!a.some((y) => key(y) === key(x))) a.push(x); };
+  mergeBy(store.places, s.places, (p) => p.id || p.name + p.city);
+  mergeBy(store.hosts, s.hosts, (h) => h.id || h.name);
+  mergeBy(store.guests, s.guests, (g) => g.name + '|' + (g.company || ''));
+  for (const o of s.occasions || []) if (!store.occasions.includes(o)) store.occasions.push(o);
+  if (s.settings) store.settings = { ...s.settings, ...Object.fromEntries(Object.entries(store.settings).filter(([, v]) => v)) };
+  save(); renderAll(); loadSettings();
 }
 function renderLogo() {
   const l = store.settings.logo;
@@ -819,7 +930,7 @@ function bind() {
   $('fFeeFull').addEventListener('change', updateAmounts);
 
   for (const [id, k] of [['sCompany', 'company'], ['sStreet', 'street'], ['sZip', 'zip'], ['sCity', 'city'], ['sCountry', 'country']]) {
-    $(id).addEventListener('change', () => { store.settings[k] = $(id).value.trim(); save(); });
+    $(id).addEventListener('change', () => { store.settings[k] = $(id).value.trim(); save(); renderStamm(); });
   }
   $('sZip').addEventListener('input', async () => {
     const cc = $('sCountry').value, z = $('sZip').value;
@@ -840,12 +951,14 @@ function bind() {
     store[b.dataset.kind].splice(Number(b.dataset.i), 1); save(); renderAll();
   });
   $('btnExport').onclick = exportStore;
+  $('btnTemplate').onclick = downloadTemplate;
+  $('stammLists').addEventListener('toggle', (e) => { const d = e.target.closest('[data-fold]'); if (d) d.open ? stammOpen.add(d.dataset.fold) : stammOpen.delete(d.dataset.fold); }, true);
   $('importFile').addEventListener('change', (e) => { if (e.target.files[0]) importStore(e.target.files[0]); e.target.value = ''; });
 
   $('btnPrint').onclick = doPrint; $('btnPrint2').onclick = doPrint;
   $('btnNew').onclick = () => newReport();
   $('btnBack').onclick = async () => { await saveNow(); showList(); };
-  $('btnSettings').onclick = () => { showView('viewSettings'); renderYears(); };
+  $('btnSettings').onclick = () => { $('foldFirma').open = !store.settings.company; showView('viewSettings'); renderYears(); };
   $('btnYearBackup').onclick = () => backupAll($('delYear').value);
   $('btnDelYear').onclick = deleteYear;
   $('btnSettingsBack').onclick = () => showList();
@@ -946,7 +1059,7 @@ async function renderReportList() {
       <span class="r-thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span aria-hidden="true">🧾</span>'}</span>
       <span class="r-main">
         <b>${esc(s.place || 'Ohne Location')}</b>
-        <small>${s.date ? esc(deDate(s.date)) : 'ohne Datum'}${s.city ? ' · ' + esc(s.city) : ''}${s.guests ? ` · ${s.guests} Gast${s.guests === 1 ? '' : 'e'}` : ''}</small>
+        <small>${s.date ? esc(deDate(s.date)) : 'ohne Datum'}${s.city ? ' · ' + esc(s.city) : ''}${s.guests ? ` · ${s.guests} ${s.guests === 1 ? 'Gast' : 'Gäste'}` : ''}</small>
         <span class="pill ${done ? 'ok' : ''}">${done ? 'PDF erstellt' : 'Entwurf'}</span>
       </span>
       <span class="r-sum">${s.gross ? eur.format(s.gross) : '–'}</span>
@@ -995,9 +1108,9 @@ async function deleteReport() {
 }
 async function startup() {
   Reports?.persist();
-  let id = null;
-  try { id = localStorage.getItem(CUR_KEY); } catch {}
-  if (id) await openReport(id); else await showList();
+  // Beim Öffnen der App immer mit der Übersicht beginnen
+  try { localStorage.removeItem(CUR_KEY); } catch {}
+  await showList();
 }
 
 // ---------- Schritte ----------
@@ -1019,7 +1132,7 @@ function stepState() {
   return {
     1: { done: form.pages.length > 0, sum: form.pages.length ? `${form.pages.length} Seite${form.pages.length === 1 ? '' : 'n'}` : 'Foto oder PDF hinzufügen' },
     2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
-    3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} Gast${form.guests.length === 1 ? '' : 'e'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
+    3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} ${form.guests.length === 1 ? 'Gast' : 'Gäste'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
     4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },
     5: { done: !!form.signature, sum: form.signature ? `unterschrieben${$('fSignPlace').value ? ', ' + $('fSignPlace').value : ''}` : 'optional, sonst von Hand' },
   };
