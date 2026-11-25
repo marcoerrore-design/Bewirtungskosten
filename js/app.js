@@ -47,7 +47,7 @@ const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(store)
 // ---------- Formularzustand ----------
 let form = freshForm();
 function freshForm() {
-  return { pages: [], pdfText: '', guests: [], ocrTotal: null, signature: null, autoCity: true, locationId: null };
+  return { belege: [], guests: [], signature: null, autoCity: true, locationId: null, autoAmounts: null };
 }
 
 // ---------- Dialog ----------
@@ -368,12 +368,23 @@ function updateAmounts() {
     <div><span>nicht abzugsfähig (30 %)</span><b>${eur.format(c.nonDeductible)}</b></div>
     ${c.feeFull && c.fee ? `<div><span>Bankgebühr, voll abzugsfähig</span><b>${eur.format(c.fee)}</b></div>` : ''}
     ${vmaHtml()}`;
-  const w = $('sumWarn');
-  const sumReceipt = r2(c.line[19].gross + c.line[7].gross + c.line[0].gross);
-  if (form.ocrTotal != null && Math.abs(form.ocrTotal - sumReceipt) > 0.05 && Math.abs(form.ocrTotal - r2(sumReceipt + c.tip)) > 0.05) {
-    w.hidden = false;
-    w.textContent = `Hinweis: Auf dem Beleg wurde als Summe ${eur.format(form.ocrTotal)} erkannt, die Aufteilung ergibt ${eur.format(sumReceipt)}. Bitte prüfen.`;
-  } else w.hidden = true;
+  // Abgleich mit der Gesamtsumme der Belege
+  const w = $('sumWarn'), chk = $('belegCheck');
+  const food = r2(c.line[19].gross + c.line[7].gross + c.line[0].gross);
+  const n = form.belege.length;
+  w.hidden = true; chk.hidden = true;
+  if (hasTotals()) {
+    const t = belegSum();
+    const ok = [food, r2(food + c.tip), r2(food + c.tip + c.fee)].some((v) => Math.abs(v - t) <= 0.05);
+    chk.hidden = false;
+    chk.innerHTML = `<span>Gesamtsumme laut ${n === 1 ? 'Beleg' : plural(n, 'Beleg', 'Belegen')}</span><b>${eur.format(t)}${ok ? ' ✓' : ''}</b>`;
+    if (!ok) {
+      w.hidden = false;
+      w.innerHTML = food
+        ? `Hinweis: Die ${n === 1 ? 'Summe auf dem Beleg' : 'Belege ergeben zusammen'} ${eur.format(t)}, die Aufteilung ergibt ${eur.format(food)}${c.tip ? ` (mit Trinkgeld ${eur.format(r2(food + c.tip))})` : ''}. Bitte prüfen.`
+        : `Bitte die Gesamtsumme von ${eur.format(t)} nach Steuersätzen aufteilen.<span class="take"><button type="button" class="small" data-take="7">Ganz als 7 % übernehmen</button><button type="button" class="small" data-take="19">Ganz als 19 % übernehmen</button></span>`;
+    }
+  }
   return c;
 }
 
@@ -407,36 +418,174 @@ async function normalizeImage(file) {
   cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
   return cv.toDataURL('image/jpeg', 0.88);
 }
-async function addFiles(files) {
+// ---------- Belege (mehrere je Abrechnung, jeder mit eigenen Seiten und Betrag) ----------
+const allPages = () => form.belege.flatMap((b) => b.pages);
+const newBeleg = () => ({ id: uid(), pages: [], pdfText: '', text: '', total: null, totalAuto: true, parsed: null });
+const findBeleg = (id) => form.belege.find((b) => b.id === id);
+const hasTotals = () => form.belege.some((b) => b.total != null);
+const belegSum = () => r2(form.belege.reduce((s, b) => s + (b.total || 0), 0));
+const hasPdfText = (b) => b.pdfText.replace(/\s/g, '').length >= 40;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+// Ältere Abrechnungen hatten nur eine Seitenliste: als einen Beleg übernehmen
+function belegeFromReport(r) {
+  if (Array.isArray(r.belege)) return r.belege.map((b) => ({ ...newBeleg(), ...b, pages: b.pages || [] }));
+  if (r.pages?.length) return [{ ...newBeleg(), pages: r.pages, pdfText: r.pdfText || '', text: r.rawText || '', total: r.ocrTotal ?? null }];
+  return [];
+}
+
+async function readFile(f) {
+  const out = { pages: [], pdfText: '' };
+  if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+    const lib = await getPdfjs();
+    const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
+    for (let p = 1; p <= Math.min(doc.numPages, 10); p++) {
+      const page = await doc.getPage(p);
+      const tc = await page.getTextContent();
+      out.pdfText += textFromPdfItems(tc.items) + '\n';
+      const vp = page.getViewport({ scale: 2 });
+      const cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      out.pages.push({ name: `${f.name} – Seite ${p}`, src: cv.toDataURL('image/jpeg', 0.9), pdf: true });
+    }
+  } else if (f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(f.name)) {
+    out.pages.push({ name: f.name, src: await normalizeImage(f) });
+  }
+  return out;
+}
+// Jede Datei wird ein eigener Beleg. Mit target werden die Seiten an diesen Beleg angehängt.
+async function addFiles(files, { target = null, crop = false } = {}) {
   $('ocrStatus').textContent = 'Lade Beleg …';
+  const touched = [], added = [];
   try {
     for (const f of files) {
-      if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
-        const lib = await getPdfjs();
-        const doc = await lib.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise;
-        for (let p = 1; p <= Math.min(doc.numPages, 10); p++) {
-          const page = await doc.getPage(p);
-          const tc = await page.getTextContent();
-          form.pdfText += textFromPdfItems(tc.items) + '\n';
-          const vp = page.getViewport({ scale: 2 });
-          const cv = document.createElement('canvas');
-          cv.width = vp.width; cv.height = vp.height;
-          const ctx = cv.getContext('2d');
-          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
-          await page.render({ canvasContext: ctx, viewport: vp }).promise;
-          form.pages.push({ name: `${f.name} – Seite ${p}`, src: cv.toDataURL('image/jpeg', 0.9) });
-        }
-      } else if (f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic)$/i.test(f.name)) {
-        form.pages.push({ name: f.name, src: await normalizeImage(f) });
-      }
+      const r = await readFile(f);
+      if (!r.pages.length) continue;
+      let b = target && findBeleg(target);
+      if (!b) { b = newBeleg(); form.belege.push(b); }
+      b.pages.push(...r.pages); b.pdfText += r.pdfText;
+      if (!r.pdfText.trim()) added.push(...r.pages.map((pg) => [b, pg]));
+      if (!touched.includes(b)) touched.push(b);
     }
-    $('ocrStatus').textContent = form.pages.length ? '' : 'Dateiformat nicht erkannt.';
+    $('ocrStatus').textContent = touched.length ? '' : 'Dateiformat nicht erkannt.';
   } catch (e) {
     console.error(e);
     $('ocrStatus').textContent = 'Beleg konnte nicht gelesen werden: ' + (e.message || e);
   }
-  renderThumbs(); changed();
-  if (form.pages.length) runOcr();
+  renderBelege(); changed();
+  if (!touched.length) return;
+  // Foto mit der Kamera: gleich zuschneiden, damit die Texterkennung nur den Bon sieht.
+  // Fotos aus Dateien: automatisch zuschneiden, wenn der Bon klar erkennbar ist (änderbar über „Zuschnitt“).
+  if (crop) for (const [b, pg] of added) await cropPage(b.id, b.pages.indexOf(pg), false);
+  else if (window.Crop && added.length) {
+    $('ocrStatus').textContent = 'Schneide Beleg zu …';
+    for (const [, pg] of added) {
+      try { const res = await window.Crop.auto(pg.src); if (res) { pg.orig = pg.src; pg.src = res.src; pg.crop = res.crop; } } catch (e) { console.warn(e); }
+    }
+    renderBelege(); changed();
+  }
+  runOcr(touched);
+}
+async function cropPage(bid, pi, rerun = true) {
+  const b = findBeleg(bid), pg = b?.pages[pi];
+  if (!pg || !window.Crop) return false;
+  let res;
+  try { res = await window.Crop.open(pg.orig || pg.src, pg.crop); } catch (e) { console.error(e); return false; }
+  if (!res) return false;
+  const c = res.crop;
+  if (!c.rot && c.x <= 0.001 && c.y <= 0.001 && c.w >= 0.999 && c.h >= 0.999) {
+    if (pg.orig) pg.src = pg.orig;
+    delete pg.orig; delete pg.crop;
+  } else {
+    if (!pg.orig) pg.orig = pg.src;
+    pg.src = res.src; pg.crop = c;
+  }
+  renderBelege(); changed();
+  if (rerun && !(pg.pdf && hasPdfText(b))) runOcr([b]);
+  return true;
+}
+function renderBelege() {
+  const n = form.belege.length;
+  $('belege').innerHTML = form.belege.map((b, bi) => `
+    <div class="beleg" data-b="${b.id}">
+      <div class="beleg-head"><b>Beleg ${bi + 1}</b><small>${plural(b.pages.length, 'Seite', 'Seiten')}</small>
+        <button type="button" class="ghost small danger" data-act="del">Entfernen</button></div>
+      <div class="thumbs">${b.pages.map((p, pi) => `<figure><img src="${p.src}" alt="${esc(p.name)}">
+          <button type="button" class="x" data-act="delpage" data-p="${pi}" aria-label="Seite entfernen">×</button>
+          <button type="button" class="crop" data-act="crop" data-p="${pi}">✂︎ ${p.crop ? 'Zuschnitt' : 'Zuschneiden'}</button></figure>`).join('')}
+        <button type="button" class="add-page" data-act="addpage" aria-label="Seite zu Beleg ${bi + 1} hinzufügen"><span aria-hidden="true">＋</span>Seite</button></div>
+      <div class="beleg-foot">
+        <label>Betrag laut Beleg (brutto)<input class="btotal" inputmode="decimal" placeholder="0,00" value="${b.total != null ? num2.format(b.total) : ''}"></label>
+        <button type="button" class="ghost small" data-act="pdf">Als PDF sichern</button>
+      </div>
+    </div>`).join('');
+  renderBelegSum();
+  $('btnOcr').disabled = !n;
+  $('btnOcr').textContent = n > 1 ? 'Belege auslesen' : 'Beleg auslesen';
+}
+function renderBelegSum() {
+  const n = form.belege.length, el = $('belegSum');
+  el.hidden = !n;
+  if (!n) return;
+  el.innerHTML = `<span>Gesamtsumme ${n > 1 ? plural(n, 'Beleg', 'Belege') : 'Beleg'}</span><b>${hasTotals() ? eur.format(belegSum()) : '–'}</b>
+    ${n > 1 ? '<button type="button" class="ghost small" data-act="pdfall">Alle Belege als ein PDF</button>' : ''}`;
+}
+const AMT_AUTO = ['a19', 'a7', 'a0', 'aTip'];
+const amtSnap = () => AMT_AUTO.map((id) => $(id).value).join('|');
+// Nach dem Entfernen eines Belegs die Beträge neu zusammenrechnen, solange niemand sie von Hand geändert hat
+function reaggregate() {
+  if (form.autoAmounts == null || amtSnap() !== form.autoAmounts) return;
+  const m = mergeParsed();
+  const setAmt = (id, v) => { $(id).value = v ? num2.format(v) : ''; };
+  setAmt('a19', m.gross[19]); setAmt('a7', m.gross[7]); setAmt('a0', m.gross[0]); setAmt('aTip', m.tip);
+  form.autoAmounts = amtSnap();
+}
+async function removeBeleg(bid) {
+  const i = form.belege.findIndex((b) => b.id === bid);
+  if (i < 0) return;
+  if (!(await confirmDlg('Beleg entfernen', `Beleg ${i + 1} mit ${plural(form.belege[i].pages.length, 'Seite', 'Seiten')} aus dieser Abrechnung entfernen?`, 'Entfernen'))) return;
+  form.belege.splice(i, 1);
+  reaggregate(); renderRaw(); renderBelege(); changed();
+}
+function removePage(bid, pi) {
+  const b = findBeleg(bid); if (!b) return;
+  b.pages.splice(pi, 1);
+  if (!b.pages.length) { form.belege.splice(form.belege.indexOf(b), 1); reaggregate(); renderRaw(); }
+  renderBelege(); changed();
+}
+const imgSize = (src) => new Promise((res) => { const i = new Image(); i.onload = () => res({ w: i.naturalWidth, h: i.naturalHeight }); i.onerror = () => res(null); i.src = src; });
+const safeName = (t) => String(t || '').replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-');
+// Belege (zugeschnitten) als eigenes PDF ablegen: eine A4-Seite je Belegseite
+async function saveBelegePdf(list) {
+  if (inPreview) {
+    await ask('PDF in der Vorschau nicht möglich', [], '', `<p class="dlg-text">Diese Vorschau darf keine Dateien speichern. Für das PDF bitte die Online-Version öffnen:</p><p><a href="${PAGES_URL}" target="_blank" rel="noopener">${PAGES_URL}</a></p>`);
+    return;
+  }
+  $('ocrStatus').textContent = 'PDF wird erstellt …';
+  try {
+    await loadScript('vendor/jspdf.umd.min.js');
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    const M = 10, maxW = 210 - 2 * M, maxH = 297 - 2 * M;
+    let first = true;
+    for (const b of list) for (const pg of b.pages) {
+      const s = await imgSize(pg.src); if (!s) continue;
+      if (!first) doc.addPage(); first = false;
+      const k = Math.min(maxW / s.w, maxH / s.h), w = s.w * k, h = s.h * k;
+      doc.addImage(pg.src, pg.src.startsWith('data:image/png') ? 'PNG' : 'JPEG', M + (maxW - w) / 2, M, w, h, undefined, 'FAST');
+    }
+    const p = $('fLocation').value.trim();
+    const no = list.length === 1 && form.belege.length > 1 ? '_' + (form.belege.indexOf(list[0]) + 1) : '';
+    const name = `${list.length > 1 ? 'Belege' : 'Beleg'}_${$('fDate').value || todayIso()}${p ? '_' + safeName(p) : ''}${no}.pdf`;
+    doc.setProperties({ title: name.replace(/\.pdf$/, ''), creator: 'Bewirtungskosten-Abrechnung (Web-App)' });
+    const ok = await saveFile(doc.output('blob'), name);
+    $('ocrStatus').textContent = ok ? `✓ ${name} gesichert.` : '';
+  } catch (e) {
+    console.error(e);
+    $('ocrStatus').textContent = 'PDF konnte nicht erstellt werden: ' + (e.message || e);
+  }
 }
 // pdf.js liefert Textstücke; zu Zeilen zusammensetzen (gleiche y-Position)
 function textFromPdfItems(items) {
@@ -450,9 +599,23 @@ function textFromPdfItems(items) {
   }
   return rows.sort((a, b) => b.y - a.y).map((r) => r.parts.sort((a, b) => a.x - b.x).map((p) => p.s).join(' ')).join('\n');
 }
-function renderThumbs() {
-  $('thumbs').innerHTML = form.pages.map((p, i) => `<figure><img src="${p.src}" alt="${esc(p.name)}"><button type="button" data-i="${i}" aria-label="entfernen">×</button></figure>`).join('');
-  $('btnOcr').disabled = !form.pages.length;
+function renderRaw() {
+  const n = form.belege.length;
+  const text = form.belege.filter((b) => b.text).map((b) => (n > 1 ? `––– Beleg ${form.belege.indexOf(b) + 1} –––\n` : '') + b.text.trim()).join('\n\n');
+  $('rawText').textContent = text;
+  $('rawBox').hidden = !text;
+}
+// Ergebnisse aller Belege zusammenführen: Beträge addieren, Datum und Ort vom ersten Beleg, der sie enthält
+function mergeParsed() {
+  const ps = form.belege.map((b) => b.parsed).filter(Boolean);
+  const loc = ps.find((p) => p.name || p.city) || {};
+  const gross = { 19: 0, 7: 0, 0: 0 }; let tip = 0;
+  for (const p of ps) {
+    for (const r of [19, 7, 0]) gross[r] = r2(gross[r] + (p.gross?.[r] || 0));
+    tip = r2(tip + (p.tip || 0));
+  }
+  return { date: (ps.find((p) => p.date) || {}).date || null, name: loc.name || null, street: loc.street || null, zip: loc.zip || null, city: loc.city || null,
+    gross, tip, total: hasTotals() ? belegSum() : null };
 }
 
 // ---------- Texterkennung ----------
@@ -477,32 +640,42 @@ async function getWorker() {
     cacheMethod: 'none',
     gzip: true,
     logger: (m) => {
-      if (m.status === 'recognizing text') $('ocrStatus').textContent = `Lese Beleg … ${Math.round(m.progress * 100)} %`;
+      if (m.status === 'recognizing text') $('ocrStatus').textContent = `${ocrLabel} … ${Math.round(m.progress * 100)} %`;
     },
   });
   await worker.setParameters({ preserve_interword_spaces: '1' });
   return worker;
 }
-async function runOcr() {
+let ocrLabel = 'Lese Beleg';
+async function runOcr(list) {
+  if (!Array.isArray(list)) list = form.belege; // auch als Klick-Handler
+  list = list.filter((b) => form.belege.includes(b));
+  if (!list.length) return;
   $('btnOcr').disabled = true;
   try {
-    let text = form.pdfText.trim();
-    if (text.replace(/\s/g, '').length < 40) {
-      const w = await getWorker();
-      text = '';
-      for (const p of form.pages) {
-        const { data } = await w.recognize(p.src);
+    for (const b of list) {
+      const no = form.belege.indexOf(b) + 1;
+      ocrLabel = form.belege.length > 1 ? `Lese Beleg ${no} von ${form.belege.length}` : 'Lese Beleg';
+      // Digitale PDFs: Textlayer direkt; Fotos (und PDF-Scans ohne Text) per Texterkennung
+      const usePdf = hasPdfText(b);
+      let text = usePdf ? b.pdfText.trim() + '\n' : '';
+      for (const p of b.pages) {
+        if (usePdf && p.pdf) continue;
+        const { data } = await (await getWorker()).recognize(p.src);
         text += data.text + '\n';
       }
+      b.text = text;
+      b.parsed = parseReceipt(text);
+      if (b.totalAuto || b.total == null) { b.total = b.parsed.total ?? null; b.totalAuto = true; }
     }
-    $('rawText').textContent = text;
-    $('rawBox').hidden = false;
-    applyParsed(parseReceipt(text));
+    renderRaw();
+    renderBelege();
+    applyParsed(mergeParsed());
   } catch (e) {
     console.error(e);
     $('ocrStatus').textContent = 'Texterkennung fehlgeschlagen. Bitte Werte von Hand eintragen.';
   } finally {
-    $('btnOcr').disabled = !form.pages.length;
+    $('btnOcr').disabled = !form.belege.length;
   }
 }
 function applyParsed(r) {
@@ -522,7 +695,8 @@ function applyParsed(r) {
     found.push('Beträge');
   }
   if (r.tip) { setAmt('aTip', r.tip); found.push('Trinkgeld'); }
-  form.ocrTotal = r.total;
+  if (r.total != null) found.push(form.belege.length > 1 ? 'Gesamtsumme' : 'Summe');
+  form.autoAmounts = amtSnap();
   const saved = matchSavedPlace(r.name, r.zip);
   if (saved) {
     selectLocation(saved);
@@ -627,16 +801,16 @@ function buildPrint() {
       <tr><td>Betriebsausgabe, nicht abzugsfähig (30 %)</td><td>${eur.format(c.nonDeductible)}</td></tr>
       ${c.feeFull && c.fee ? `<tr><td>Auslandseinsatzentgelt als Bankgebühr, voll abzugsfähig</td><td>${eur.format(c.fee)}</td></tr>` : ''}
     </table>
-    <p class="p-note">${form.pages.length ? 'Die Rechnung ist als Anlage beigefügt.' : 'Rechnung: bitte beifügen.'}${c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : ''}</p>
+    <p class="p-note">${esc(noteText(c))}</p>
 
     <div class="p-sign">
       <div class="p-sign-field"><div class="p-sign-val">${esc($('fSignPlace').value)}${$('fSignPlace').value && $('fSignDate').value ? ', ' : ''}${esc(deDate($('fSignDate').value))}</div><div class="p-line">Ort, Datum</div></div>
       <div class="p-sign-field"><div class="p-sign-val sig">${form.signature ? `<img src="${form.signature}" alt="Unterschrift">` : ''}</div><div class="p-line">Unterschrift Gastgeber${host ? ` (${esc(host.name)})` : ''}</div></div>
     </div>
   </section>
-  ${form.pages.map((pg, i) => `
+  ${anlagen(p.name).map((pg) => `
   <section class="p-page p-receipt">
-    <div class="p-receipt-h">Anlage ${form.pages.length > 1 ? `${i + 1}/${form.pages.length} ` : ''}– Beleg vom ${esc(deDate($('fDate').value))}, ${esc(p.name)}</div>
+    <div class="p-receipt-h">${esc(pg.label)}</div>
     <img src="${pg.src}" alt="Beleg">
   </section>`).join('')}`;
   $('print').innerHTML = pages;
@@ -644,6 +818,28 @@ function buildPrint() {
 }
 const PAGES_URL = 'https://marcoerrore-design.github.io/Bewirtungskosten/';
 const inPreview = (() => { try { return window.self !== window.top; } catch { return true; } })();
+// Text unter den Beträgen
+function noteText(c) {
+  const n = form.belege.length;
+  const base = !n ? 'Rechnung: bitte beifügen.'
+    : n === 1 ? 'Die Rechnung ist als Anlage beigefügt.'
+    : `Die ${n} Belege sind als Anlage beigefügt${hasTotals() ? ` (zusammen ${eur.format(belegSum())})` : ''}.`;
+  return base + (c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : '');
+}
+// Alle Belegseiten als Anlagen, mit Überschrift je Seite
+function anlagen(placeName) {
+  const N = allPages().length, many = form.belege.length > 1, date = deDate($('fDate').value);
+  const out = [];
+  let k = 0;
+  form.belege.forEach((b, bi) => b.pages.forEach((pg, pi) => {
+    k++;
+    const which = many ? `Beleg ${bi + 1}` : 'Beleg';
+    const pageNo = b.pages.length > 1 ? ` (Seite ${pi + 1}/${b.pages.length})` : '';
+    const amount = many && b.total != null && pi === 0 ? ` · ${eur.format(b.total)}` : '';
+    out.push({ src: pg.src, label: `Anlage ${N > 1 ? `${k}/${N} ` : ''}– ${which}${pageNo} vom ${date}, ${placeName || ''}${amount}` });
+  }));
+  return out;
+}
 function pdfData() {
   const c = updateAmounts();
   const p = placeFromFields();
@@ -653,7 +849,6 @@ function pdfData() {
   const n = form.guests.length + (hostAttends ? 1 : 0);
   syncSignPlace();
   const signPlaceDate = [$('fSignPlace').value.trim(), deDate($('fSignDate').value)].filter(Boolean).join(', ');
-  const safe = (t) => String(t || '').replace(/[^\wäöüÄÖÜß -]+/g, '').trim().replace(/\s+/g, '-');
   return {
     company: store.settings.company, companyLines: companyLines(), logo: store.settings.logo,
     date: deDate($('fDate').value),
@@ -666,10 +861,10 @@ function pdfData() {
     participants: `${n} Person${n === 1 ? '' : 'en'}${hostAttends ? ' (einschließlich Gastgeber)' : ''}`,
     occasion: [$('fOccasion').value, $('fOccasionNote').value.trim()].filter(Boolean).join(' – '),
     calc: c,
-    note: (form.pages.length ? 'Die Rechnung ist als Anlage beigefügt.' : 'Rechnung: bitte beifügen.') + (c.tip ? ' Das Trinkgeld ist nicht auf der Rechnung ausgewiesen und wird vom Gastgeber durch Unterschrift bestätigt.' : ''),
-    signPlaceDate, signature: form.signature, pages: form.pages,
+    note: noteText(c),
+    signPlaceDate, signature: form.signature, pages: anlagen(p.name),
     vma: (() => { const v = vmaNow(); if (v && v.rate) v.placeLabel = vmaPlace(v.rate); if (v) { v.city = p.city; v.countryFull = country ? country.name : p.country; } return v; })(),
-    fileName: `Bewirtungskosten-Abrechnung_${$('fDate').value || todayIso()}${p.name ? '_' + safe(p.name) : ''}.pdf`,
+    fileName: `Bewirtungskosten-Abrechnung_${$('fDate').value || todayIso()}${p.name ? '_' + safeName(p.name) : ''}.pdf`,
   };
 }
 let lastPdf = null;
@@ -738,7 +933,7 @@ function resetForm() {
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
   $('fileInput').value = '';
   sig?.clear();
-  renderThumbs(); renderChips(); updateAmounts();
+  renderBelege(); renderChips(); updateAmounts();
   window.scrollTo({ top: 0 });
 }
 
@@ -911,15 +1106,40 @@ function bind() {
   const fi = $('fileInput'), drop = $('drop');
   fi.addEventListener('change', () => { if (fi.files.length) addFiles([...fi.files]); fi.value = ''; });
   const cam = $('camInput');
-  cam.addEventListener('change', () => { if (cam.files.length) addFiles([...cam.files]); cam.value = ''; });
+  cam.addEventListener('change', () => { if (cam.files.length) addFiles([...cam.files], { crop: true }); cam.value = ''; });
+  const pi = $('pageInput');
+  let pageTarget = null;
+  pi.addEventListener('change', () => { if (pi.files.length) addFiles([...pi.files], { target: pageTarget }); pi.value = ''; });
   ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
   ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
-  $('thumbs').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-i]'); if (!b) return;
-    form.pages.splice(Number(b.dataset.i), 1);
-    if (!form.pages.length) form.pdfText = '';
-    renderThumbs(); changed();
+  $('belege').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]'), el = e.target.closest('[data-b]'); if (!btn || !el) return;
+    const bid = el.dataset.b, p = Number(btn.dataset.p), act = btn.dataset.act;
+    if (act === 'del') removeBeleg(bid);
+    else if (act === 'delpage') removePage(bid, p);
+    else if (act === 'crop') cropPage(bid, p);
+    else if (act === 'addpage') { pageTarget = bid; pi.click(); }
+    else if (act === 'pdf') saveBelegePdf([findBeleg(bid)]);
+  });
+  $('belege').addEventListener('input', (e) => {
+    if (!e.target.classList.contains('btotal')) return;
+    const b = findBeleg(e.target.closest('[data-b]').dataset.b); if (!b) return;
+    const n = parseAmount(e.target.value);
+    b.total = e.target.value.trim() && Number.isFinite(n) ? r2(n) : null; b.totalAuto = false;
+    renderBelegSum(); updateAmounts();
+  });
+  $('belege').addEventListener('focusout', (e) => {
+    if (!e.target.classList.contains('btotal')) return;
+    const b = findBeleg(e.target.closest('[data-b]').dataset.b);
+    if (b) e.target.value = b.total != null ? num2.format(b.total) : '';
+  });
+  $('belegSum').addEventListener('click', (e) => { if (e.target.closest('[data-act="pdfall"]')) saveBelegePdf(form.belege); });
+  $('sumWarn').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-take]'); if (!t) return;
+    const fee = amt('aFee'), tip = amt('aTip');
+    $('a' + t.dataset.take).value = num2.format(Math.max(0, r2(belegSum() - tip - fee)));
+    changed();
   });
   $('btnOcr').onclick = runOcr;
 
@@ -1061,14 +1281,14 @@ function collectReport() {
   const c = calc();
   return {
     ...current, updatedAt: Date.now(), fields, checks,
-    guests: form.guests, pages: form.pages, pdfText: form.pdfText, signature: form.signature,
-    ocrTotal: form.ocrTotal, locationId: form.locationId, rawText: $('rawText').textContent,
+    guests: form.guests, belege: form.belege, signature: form.signature,
+    locationId: form.locationId, rawText: $('rawText').textContent, autoAmounts: form.autoAmounts,
     summary: { date: fields.fDate, place: fields.fLocation, city: fields.fCity, gross: c.gross, guests: form.guests.length,
       host: store.hosts.find((h) => h.id === fields.fHost)?.name || '' },
   };
 }
 function isEmptyReport(r) {
-  return !r.pages.length && !r.guests.length && !r.signature && !r.fields.fDate && !r.fields.fLocation && !r.summary.gross && !r.fields.fOccasion;
+  return !r.belege.length && !r.guests.length && !r.signature && !r.fields.fDate && !r.fields.fLocation && !r.summary.gross && !r.fields.fOccasion;
 }
 function syncSignPlace() { $('fSignPlace').value = $('fCity').value.trim(); }
 function changed() {
@@ -1120,7 +1340,7 @@ async function renderReportList() {
     : '';
   $('reportList').innerHTML = all.length ? all.map((r) => {
     const s = r.summary || {};
-    const thumb = r.pages?.[0]?.src;
+    const thumb = (r.belege?.[0]?.pages?.[0] || r.pages?.[0])?.src;
     const done = r.status === 'pdf';
     return `<li><button type="button" class="report" data-id="${r.id}">
       <span class="r-thumb">${thumb ? `<img src="${thumb}" alt="">` : '<span aria-hidden="true">🧾</span>'}</span>
@@ -1152,11 +1372,11 @@ async function openReport(id) {
   current = { id: r.id, createdAt: r.createdAt, status: r.status || 'entwurf', saved: true };
   for (const fid of FIELD_IDS) if (r.fields && fid in r.fields) $(fid).value = r.fields[fid];
   for (const cid of CHECK_IDS) if (r.checks && cid in r.checks) $(cid).checked = r.checks[cid];
-  form.guests = r.guests || []; form.pages = r.pages || []; form.pdfText = r.pdfText || '';
-  form.ocrTotal = r.ocrTotal ?? null; form.locationId = r.locationId || null; form.autoCity = false;
+  form.guests = r.guests || []; form.belege = belegeFromReport(r);
+  form.locationId = r.locationId || null; form.autoCity = false; form.autoAmounts = r.autoAmounts ?? null;
   sig.set(r.signature || null);
   if (r.rawText) { $('rawText').textContent = r.rawText; $('rawBox').hidden = false; }
-  renderThumbs(); renderChips(); updateAmounts(); updateLocState();
+  renderBelege(); renderChips(); updateAmounts(); updateLocState();
   restoring = false;
   try { localStorage.setItem(CUR_KEY, r.id); } catch {}
   $('editTitle').textContent = 'Abrechnung bearbeiten';
@@ -1197,7 +1417,7 @@ function stepState() {
   const c = calc();
   const occ = $('fOccasion').value;
   return {
-    1: { done: form.pages.length > 0, sum: form.pages.length ? `${form.pages.length} Seite${form.pages.length === 1 ? '' : 'n'}` : 'Foto oder PDF hinzufügen' },
+    1: { done: form.belege.length > 0, sum: form.belege.length ? [plural(form.belege.length, 'Beleg', 'Belege'), hasTotals() ? eur.format(belegSum()) : ''].filter(Boolean).join(' · ') : 'Foto oder PDF hinzufügen' },
     2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
     3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} ${form.guests.length === 1 ? 'Gast' : 'Gäste'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
     4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },

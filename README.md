@@ -2,7 +2,9 @@
 
 Kleine Web-App für Bewirtungskostenbelege nach § 4 Abs. 5 Satz 1 Nr. 2 EStG.
 
-- Beleg als Foto oder PDF hochladen, Texterkennung läuft lokal im Browser (Tesseract.js, deutsches Sprachmodell; bei digitalen PDFs wird der Textlayer direkt gelesen).
+- Ein oder mehrere Belege je Abrechnung als Foto oder PDF hochladen, Texterkennung läuft lokal im Browser (Tesseract.js, deutsches Sprachmodell; bei digitalen PDFs wird der Textlayer direkt gelesen).
+- Jeder Beleg hat einen eigenen Betrag, die Gesamtsumme aller Belege wird mit der Aufteilung nach Steuersätzen abgeglichen.
+- Belegfotos zuschneiden und drehen (`js/crop.js`, automatische Erkennung des Bons, Original bleibt erhalten); Belege einzeln oder zusammen als PDF sichern.
 - Datum, Ort, Beträge nach 19 % / 7 % / 0 % und Trinkgeld werden vorgeschlagen und bleiben änderbar.
 - PLZ-Suche für DE, AT, CH, LI, NL, BE, LU, DK, SE, NO, FI, IS (zippopotam.us, Rückfall openplzapi.org).
 - Locations (Restaurants/Hotels) als bearbeitbares Dropdown, dazu, Gastgeber, Gäste und Anlässe (lokal im Browser, Export/Import als JSON).
@@ -28,5 +30,6 @@ Für die PLZ-Suche braucht der Browser Internet. Später kann der Ordner unverä
 - `index.html`, `css/app.css` – Oberfläche und Druck-Layout
 - `js/app.js` – Formular, Stammdaten, Druckansicht
 - `js/receipt.js` – Auslesen von Bons (Heuristiken), Tests: `node test/receipt.test.mjs`
+- `js/crop.js` – Zuschneiden und Drehen der Belegfotos
 - `js/plz.js` – Postleitzahlen-Suche
 - `vendor/` – Tesseract.js 5 mit deutschem Sprachmodell und pdf.js 3, als klassische Skripte eingebettet; neu erzeugen mit `npm install && npm run build:vendor`

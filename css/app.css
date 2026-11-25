@@ -67,7 +67,40 @@ button:disabled { opacity: .45; cursor: default; }
 .thumbs:empty { display: none; }
 .thumbs figure { position: relative; margin: 0; width: 92px; height: 120px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
 .thumbs img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
-.thumbs button, .chip button { position: absolute; top: 3px; right: 3px; padding: 0; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; line-height: 1; }
+.thumbs button.x, .chip button { position: absolute; top: 3px; right: 3px; padding: 0; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; line-height: 1; }
+.belege { display: grid; gap: 10px; margin-top: 12px; }
+.belege:empty { display: none; }
+.beleg { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+.beleg-head { display: flex; align-items: baseline; gap: 8px; }
+.beleg-head small { color: var(--muted); }
+.beleg-head button { margin-left: auto; }
+.beleg .thumbs { margin-top: 8px; }
+.thumbs button.crop { position: absolute; left: 4px; right: 4px; bottom: 4px; padding: 3px 0; border: 0; border-radius: 6px; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; white-space: nowrap; min-height: 0; }
+.thumbs .add-page { width: 92px; height: 120px; display: grid; place-content: center; gap: 2px; border: 2px dashed var(--line); border-radius: 8px; background: none; color: var(--muted); font-size: 13px; padding: 0; }
+.thumbs .add-page span { font-size: 22px; line-height: 1; }
+.beleg-foot { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.beleg-foot label { margin: 0; flex: 1 1 180px; font-size: 13px; }
+.beleg-foot input { text-align: right; font-variant-numeric: tabular-nums; margin-bottom: 0; }
+.beleg-sum, .beleg-check { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding: 8px 10px; background: var(--accent-soft); border-radius: 8px; font-size: 14px; }
+.beleg-sum b, .beleg-check b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.beleg-sum button { flex-basis: 100%; }
+.belege-hint { margin-top: 8px; font-size: 12px; }
+#sumWarn .take { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+/* Zuschneiden */
+.crop-dlg { width: min(680px, calc(100vw - 16px)); padding: 14px; max-height: calc(100vh - 16px); }
+.crop-stage { display: flex; justify-content: center; background: #2a2d33; border-radius: 8px; padding: 14px; overflow: hidden; }
+.crop-inner { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
+.crop-inner canvas { display: block; width: 100%; height: 100%; }
+.crop-box { position: absolute; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); outline: 2px solid #fff; cursor: move; touch-action: none; }
+.crop-box .h { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; touch-action: none; }
+.crop-box .h::after { content: ""; position: absolute; inset: 7px; background: #fff; border: 2px solid var(--accent); border-radius: 50%; }
+.crop-box .nw { left: 0; top: 0; cursor: nwse-resize; } .crop-box .ne { left: 100%; top: 0; cursor: nesw-resize; }
+.crop-box .se { left: 100%; top: 100%; cursor: nwse-resize; } .crop-box .sw { left: 0; top: 100%; cursor: nesw-resize; }
+.crop-box .n { left: 50%; top: 0; cursor: ns-resize; } .crop-box .s { left: 50%; top: 100%; cursor: ns-resize; }
+.crop-box .e { left: 100%; top: 50%; cursor: ew-resize; } .crop-box .w { left: 0; top: 50%; cursor: ew-resize; }
+@media (pointer: coarse) { .crop-box .h { width: 40px; height: 40px; margin: -20px 0 0 -20px; } .crop-box .h::after { inset: 12px; } }
+.crop-hint { margin: 8px 0; }
+.crop-tools { display: flex; gap: 6px; flex-wrap: wrap; }
 .ocr-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .raw { margin-top: 10px; font-size: 13px; }
 .raw pre { white-space: pre-wrap; background: var(--bg); padding: 8px; border-radius: 8px; max-height: 260px; overflow: auto; font-size: 12px; }
@@ -201,7 +234,8 @@ html { -webkit-tap-highlight-color: transparent; }
   button.small, .file-btn.small { min-height: 36px; padding: 8px 12px; }
   .loc-act { min-width: 40px; min-height: 40px; }
   .chip button { width: 28px; height: 28px; }
-  .thumbs button { width: 28px; height: 28px; }
+  .thumbs button.x { width: 28px; height: 28px; min-height: 0; }
+  .thumbs button.crop { min-height: 32px; }
   .stamm button.x { min-width: 40px; min-height: 36px; }
 }
 input[type="date"] { -webkit-appearance: none; appearance: none; min-height: 40px; text-align: left; }

@@ -124,7 +124,7 @@ async function build(d) {
   for (let i = 0; i < d.pages.length; i++) {
     doc.addPage();
     doc.setFontSize(8.5); muted();
-    doc.text(`Anlage${d.pages.length > 1 ? ` ${i + 1}/${d.pages.length}` : ''} – Beleg vom ${d.date || ''}, ${p.name || ''}`, M, M);
+    doc.text(d.pages[i].label || `Anlage${d.pages.length > 1 ? ` ${i + 1}/${d.pages.length}` : ''} – Beleg vom ${d.date || ''}, ${p.name || ''}`, M, M);
     const src = d.pages[i].src;
     const s = await imageSize(src);
     if (!s) continue;
