@@ -599,7 +599,12 @@ function buildPrint() {
       <tr><th>Tag der Bewirtung</th><td>${esc([deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – ')) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
-      <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${sortedGuests().map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}${isEmp(g) ? ' (Mitarbeiter)' : ''}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
+      ${(() => {
+        const li = (arr) => `<ol>${arr.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>`;
+        const k = form.guests.filter((g) => !isEmp(g)), m = form.guests.filter(isEmp);
+        if (!k.length && !m.length) return '<tr><th>Bewirtete Personen</th><td>&nbsp;</td></tr>';
+        return (k.length ? `<tr><th>Bewirtete Kunden / Gäste</th><td>${li(k)}</td></tr>` : '') + (m.length ? `<tr><th>Bewirtete Mitarbeiter</th><td>${li(m)}</td></tr>` : '');
+      })()}
       <tr><th>Teilnehmer gesamt</th><td>${participants} Person${participants === 1 ? '' : 'en'}${$('fHostAttends').checked && host ? ' (einschließlich Gastgeber)' : ''}</td></tr>
       <tr><th>Anlass der Bewirtung</th><td>${esc(occasion) || '&nbsp;'}</td></tr>
     </table>

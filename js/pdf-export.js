@@ -60,7 +60,12 @@ async function build(d) {
   fact('Tag der Bewirtung', [d.dateLong || d.date || '']);
   fact('Ort der Bewirtung' + (p.type ? ` (${p.type})` : ''), [p.name, p.street, [p.zip, p.city].filter(Boolean).join(' ') + (p.countryName ? ', ' + p.countryName : '')].filter((x) => x && x.trim()), true);
   fact('Gastgeber', [d.host || '']);
-  fact('Bewirtete Personen', d.guests.length ? d.guests.map((g, i) => `${i + 1}. ${g.name}${g.company ? ' – ' + g.company : ''}${g.kind === 'mitarbeiter' ? ' (Mitarbeiter)' : ''}`) : ['']);
+  // Bewirtete Personen getrennt nach Kunden/Gästen und Mitarbeitern
+  const kunden = d.guests.filter((g) => g.kind !== 'mitarbeiter'), mitarb = d.guests.filter((g) => g.kind === 'mitarbeiter');
+  const plist = (arr) => arr.map((g, i) => `${i + 1}. ${g.name}${g.company ? ' – ' + g.company : ''}`);
+  if (!d.guests.length) fact('Bewirtete Personen', ['']);
+  if (kunden.length) fact('Bewirtete Kunden / Gäste', plist(kunden));
+  if (mitarb.length) fact('Bewirtete Mitarbeiter', plist(mitarb));
   fact('Teilnehmer gesamt', [d.participants]);
   fact('Anlass der Bewirtung', [d.occasion || '']);
 
