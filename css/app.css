@@ -325,3 +325,5 @@ details.fold > .fold-body { padding: 0 16px 14px; }
 .chip.emp-chip { background: var(--card); border: 1px dashed var(--accent); }
 button.all-emp { margin-top: 8px; width: 100%; }
 .mt-s { margin-top: 10px; }
+.li-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.stamm button.move { padding: 4px 8px; font-size: 12px; min-height: 32px; white-space: nowrap; }

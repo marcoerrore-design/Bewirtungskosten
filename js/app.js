@@ -200,7 +200,7 @@ function renderStamm() {
   const blockIdx = (title, kind, fold, items, label, extra = '') => `
     <details class="card fold" data-fold="${fold}" ${stammOpen.has(fold) ? 'open' : ''}>
       <summary><span><b>${title}</b><small>${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}</small></span></summary>
-      <div class="fold-body">${items.length ? `<ul>${items.map(({ g, i }) => `<li><span>${label(g)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">Noch keine Einträge.</p>'}${extra ? `<div class="row-actions start mt-s">${extra}</div>` : ''}</div>
+      <div class="fold-body">${items.length ? `<ul>${items.map(({ g, i }) => `<li><span>${label(g)}</span><span class="li-actions"><button type="button" class="ghost small move" data-move="${i}" title="${isEmp(g) ? 'zu Kunden verschieben' : 'zu Mitarbeitern verschieben'}">⇄ ${isEmp(g) ? 'Kunde' : 'Mitarbeiter'}</button><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></span></li>`).join('')}</ul>` : '<p class="hint">Noch keine Einträge.</p>'}${extra ? `<div class="row-actions start mt-s">${extra}</div>` : ''}</div>
     </details>`;
   $('stammLists').innerHTML =
     block('Locations', 'places', store.places, (p) => `<button type="button" class="linkish" data-edit="${p.id}" title="bearbeiten">${esc(p.name)} ✎</button> <small>${esc(p.zip)} ${esc(p.city)}</small>`) +
@@ -290,6 +290,25 @@ async function addGuest(emp = false) {
   let known = store.guests.find((g) => guestKey(g) === guestKey(g0));
   if (!known) { known = g0; store.guests.push(known); save(); renderStamm(); }
   return known;
+}
+// Falsch zugeordnete Person zwischen Kunden und Mitarbeitern verschieben (nur Stammdaten)
+async function moveGuest(i) {
+  const g = store.guests[i]; if (!g) return;
+  const own = store.settings.company || '';
+  if (isEmp(g)) {
+    const v = await ask(`${g.name} zu Kunden verschieben`, [{ label: 'Firma des Kunden *', required: true, value: g.company && g.company !== own ? g.company : '' }], 'Verschieben');
+    if (!v || !v[0]) return;
+    delete g.kind; g.company = v[0];
+  } else {
+    if (!(await confirmDlg('Zu Mitarbeitern verschieben', `${g.name} zu den Mitarbeitern verschieben? Als Firma wird ${own ? '„' + own + '“' : 'die eigene Firma'} eingetragen.`, 'Verschieben'))) return;
+    g.kind = 'mitarbeiter'; g.company = own;
+  }
+  // Doppelte Einträge zusammenführen
+  const dup = store.guests.findIndex((x, j) => j !== i && guestKey(x) === guestKey(g));
+  if (dup >= 0) store.guests.splice(i, 1);
+  stammOpen.add(isEmp(g) ? 'mitarbeiter' : 'kunden');
+  save(); renderStamm(); renderGuestLists();
+  alertStatus(`✓ ${g.name} ist jetzt ${isEmp(g) ? 'Mitarbeiter' : 'Kunde'}`);
 }
 function addAllEmployees() {
   const list = availableGuests(true);
@@ -988,6 +1007,7 @@ function bind() {
   $('btnLogoDel').onclick = () => { store.settings.logo = ''; save(); renderLogo(); };
   $('stammLists').addEventListener('click', (e) => {
     const ed = e.target.closest('[data-edit]'); if (ed) return editLocation(ed.dataset.edit);
+    const mv = e.target.closest('[data-move]'); if (mv) return moveGuest(Number(mv.dataset.move));
     if (e.target.closest('[data-add-emp]')) { stammOpen.add('mitarbeiter'); return addGuest(true).then(() => { renderGuestLists(); renderStamm(); }); }
     const b = e.target.closest('button.x'); if (!b) return;
     store[b.dataset.kind].splice(Number(b.dataset.i), 1); save(); renderAll();
