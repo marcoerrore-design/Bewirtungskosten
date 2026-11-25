@@ -467,6 +467,10 @@ async function addFiles(files, { target = null, crop = false } = {}) {
       if (!b) { b = newBeleg(); form.belege.push(b); }
       b.pages.push(...r.pages); b.pdfText += r.pdfText;
       if (!r.pdfText.trim()) added.push(...r.pages.map((pg) => [b, pg]));
+      // Alle Seiten in Schwarz-Weiß mit mehr Kontrast; das farbige Original bleibt für späteres Zuschneiden
+      if (window.Crop) for (const pg of r.pages) {
+        try { pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, null); } catch (e) { console.warn(e); delete pg.orig; }
+      }
       if (!touched.includes(b)) touched.push(b);
     }
     $('ocrStatus').textContent = touched.length ? '' : 'Dateiformat nicht erkannt.';
@@ -482,7 +486,7 @@ async function addFiles(files, { target = null, crop = false } = {}) {
   else if (window.Crop && added.length) {
     $('ocrStatus').textContent = 'Schneide Beleg zu …';
     for (const [, pg] of added) {
-      try { const res = await window.Crop.auto(pg.src); if (res) { pg.orig = pg.src; pg.src = res.src; pg.crop = res.crop; } } catch (e) { console.warn(e); }
+      try { const c = await window.Crop.auto(pg.orig || pg.src); if (c) { if (!pg.orig) pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, c); pg.crop = c; } } catch (e) { console.warn(e); }
     }
     renderBelege(); changed();
   }
@@ -496,8 +500,8 @@ async function cropPage(bid, pi, rerun = true) {
   if (!res) return false;
   const c = res.crop;
   if (!c.rot && c.x <= 0.001 && c.y <= 0.001 && c.w >= 0.999 && c.h >= 0.999) {
-    if (pg.orig) pg.src = pg.orig;
-    delete pg.orig; delete pg.crop;
+    if (!pg.orig) pg.orig = pg.src;
+    pg.src = res.src; delete pg.crop;
   } else {
     if (!pg.orig) pg.orig = pg.src;
     pg.src = res.src; pg.crop = c;

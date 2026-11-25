@@ -4,7 +4,7 @@ Kleine Web-App für Bewirtungskostenbelege nach § 4 Abs. 5 Satz 1 Nr. 2 EStG.
 
 - Ein oder mehrere Belege je Abrechnung als Foto oder PDF hochladen, Texterkennung läuft lokal im Browser (Tesseract.js, deutsches Sprachmodell; bei digitalen PDFs wird der Textlayer direkt gelesen).
 - Jeder Beleg hat einen eigenen Betrag, die Gesamtsumme aller Belege wird mit der Aufteilung nach Steuersätzen abgeglichen.
-- Belegfotos zuschneiden und drehen (`js/crop.js`, automatische Erkennung des Bons, Original bleibt erhalten); Belege einzeln oder zusammen als PDF sichern.
+- Belegfotos zuschneiden, drehen und in Schwarz-Weiß mit mehr Kontrast ablegen (`js/crop.js`, automatische Erkennung des Bons, Original bleibt erhalten); Belege einzeln oder zusammen als PDF sichern.
 - Datum, Ort, Beträge nach 19 % / 7 % / 0 % und Trinkgeld werden vorgeschlagen und bleiben änderbar.
 - PLZ-Suche für DE, AT, CH, LI, NL, BE, LU, DK, SE, NO, FI, IS (zippopotam.us, Rückfall openplzapi.org).
 - Locations (Restaurants/Hotels) als bearbeitbares Dropdown, dazu, Gastgeber, Gäste und Anlässe (lokal im Browser, Export/Import als JSON).

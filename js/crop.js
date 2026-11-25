@@ -80,7 +80,23 @@ async function render(origSrc, crop) {
   const sw = Math.max(1, Math.round(r.w * cv.width)), sh = Math.max(1, Math.round(r.h * cv.height));
   const out = document.createElement('canvas'); out.width = sw; out.height = sh;
   out.getContext('2d').drawImage(cv, sx, sy, sw, sh, 0, 0, sw, sh);
+  blackWhite(out);
   return out.toDataURL('image/jpeg', 0.9);
+}
+// Schwarz-Weiß mit gestrecktem Kontrast: Papier wird weiß, Schrift dunkel (besser für die Texterkennung)
+function blackWhite(cv) {
+  const ctx = cv.getContext('2d'), img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data, n = d.length / 4;
+  const lum = new Uint8Array(n), hist = new Uint32Array(256);
+  for (let i = 0; i < n; i++) { const v = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000 | 0; lum[i] = v; hist[v]++; }
+  const pct = (q) => { let c = 0; for (let v = 0; v < 256; v++) { c += hist[v]; if (c >= n * q) return v; } return 255; };
+  const lo = pct(0.01), hi = Math.max(lo + 40, pct(0.9));
+  const map = new Uint8Array(256);
+  for (let v = 0; v < 256; v++) {
+    const t = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+    map[v] = Math.round(255 * Math.pow(t, 1.3)); // etwas dunklere Mitteltöne: Schrift kräftiger
+  }
+  for (let i = 0; i < n; i++) { const v = map[lum[i]]; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; }
+  ctx.putImageData(img, 0, 0);
 }
 
 let dlg;
@@ -194,9 +210,8 @@ async function auto(origSrc) {
   const img = await loadImg(origSrc);
   const r = detect(rotated(img, 0, 1400));
   if (!r) return null;
-  const c = { rot: 0, ...r };
-  return { src: await render(origSrc, c), crop: c };
+  return { rot: 0, ...r };
 }
 
-root.Crop = { open, render, auto, detect, rotated };
+root.Crop = { open, render, auto, detect, rotated, blackWhite };
 })(window);
