@@ -162,17 +162,31 @@ function renderOccasions() {
   sel.innerHTML = '<option value="">– bitte wählen –</option>' + store.occasions.map((o) => `<option>${esc(o)}</option>`).join('');
   if (store.occasions.includes(cur)) sel.value = cur;
 }
+// Bewirtete Personen: Kunden/Geschäftspartner (kind leer) und Mitarbeiter (kind 'mitarbeiter')
+const isEmp = (g) => g.kind === 'mitarbeiter';
+const guestKey = (g) => ((isEmp(g) ? 'm|' : 'k|') + g.name + '|' + (g.company || '')).toLowerCase();
+const hostName = () => (store.hosts.find((h) => h.id === $('fHost').value)?.name || '').toLowerCase();
+function availableGuests(emp) {
+  const taken = new Set(form.guests.map(guestKey));
+  return store.guests.map((g, i) => ({ g, i }))
+    .filter(({ g }) => isEmp(g) === emp && !taken.has(guestKey(g)) && !(emp && g.name.toLowerCase() === hostName()))
+    .sort((a, b) => (emp ? 0 : (a.g.company || '').localeCompare(b.g.company || '', 'de')) || a.g.name.localeCompare(b.g.name, 'de'));
+}
 function renderGuestLists() {
-  const key = (g) => (g.name + '|' + (g.company || '')).toLowerCase();
-  const taken = new Set(form.guests.map(key));
-  const avail = store.guests.map((g, i) => ({ g, i })).filter(({ g }) => !taken.has(key(g)))
-    .sort((a, b) => (a.g.company || '').localeCompare(b.g.company || '', 'de') || a.g.name.localeCompare(b.g.name, 'de'));
-  $('fGuestSel').innerHTML = `<option value="">${store.guests.length ? (avail.length ? '– Person auswählen –' : '– alle gespeicherten Personen gewählt –') : '– noch keine Personen gespeichert –'}</option>` +
-    avail.map(({ g, i }) => `<option value="${i}">${esc(g.name)}${g.company ? ' – ' + esc(g.company) : ''}</option>`).join('');
+  const fill = (id, emp, word) => {
+    const all = store.guests.filter((g) => isEmp(g) === emp).length, avail = availableGuests(emp);
+    $(id).innerHTML = `<option value="">${all ? (avail.length ? `– ${word} auswählen –` : `– alle ${emp ? 'Mitarbeiter' : 'Kunden'} gewählt –`) : `– noch keine ${emp ? 'Mitarbeiter' : 'Kunden'} gespeichert –`}</option>` +
+      avail.map(({ g, i }) => `<option value="${i}">${esc(g.name)}${g.company && !emp ? ' – ' + esc(g.company) : ''}</option>`).join('');
+    return avail.length;
+  };
+  fill('fGuestSel', false, 'Kunden');
+  const n = fill('fEmpSel', true, 'Mitarbeiter');
+  $('btnAllEmp').disabled = !n;
+  $('btnAllEmp').textContent = n ? `Alle Mitarbeiter hinzufügen (${n})` : 'Alle Mitarbeiter hinzufügen';
 }
 function renderChips() {
   $('guestChips').innerHTML = form.guests.length
-    ? form.guests.map((g, i) => `<span class="chip${g.company ? '' : ' warn-chip'}">${esc(g.name)}${g.company ? ` <small>${esc(g.company)}</small>` : ' <small>Firma fehlt</small>'}<button type="button" data-i="${i}" aria-label="entfernen">×</button></span>`).join('')
+    ? form.guests.map((g, i) => `<span class="chip${isEmp(g) ? ' emp-chip' : (g.company ? '' : ' warn-chip')}">${esc(g.name)}${isEmp(g) ? ' <small>Mitarbeiter</small>' : (g.company ? ` <small>${esc(g.company)}</small>` : ' <small>Firma fehlt</small>')}<button type="button" data-i="${i}" aria-label="entfernen">×</button></span>`).join('')
     : '<span class="hint">Noch keine Gäste eingetragen.</span>';
 }
 // Stammdaten in den Einstellungen: jede Liste einzeln aufklappbar (Zustand bleibt beim Neuzeichnen erhalten)
@@ -183,10 +197,16 @@ function renderStamm() {
       <summary><span><b>${title}</b><small>${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}</small></span></summary>
       <div class="fold-body">${items.length ? `<ul>${items.map((x, i) => `<li><span>${label(x)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">Noch keine Einträge.</p>'}</div>
     </details>`;
+  const blockIdx = (title, kind, fold, items, label, extra = '') => `
+    <details class="card fold" data-fold="${fold}" ${stammOpen.has(fold) ? 'open' : ''}>
+      <summary><span><b>${title}</b><small>${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}</small></span></summary>
+      <div class="fold-body">${items.length ? `<ul>${items.map(({ g, i }) => `<li><span>${label(g)}</span><button type="button" class="x" data-kind="${kind}" data-i="${i}" aria-label="löschen">×</button></li>`).join('')}</ul>` : '<p class="hint">Noch keine Einträge.</p>'}${extra ? `<div class="row-actions start mt-s">${extra}</div>` : ''}</div>
+    </details>`;
   $('stammLists').innerHTML =
     block('Locations', 'places', store.places, (p) => `<button type="button" class="linkish" data-edit="${p.id}" title="bearbeiten">${esc(p.name)} ✎</button> <small>${esc(p.zip)} ${esc(p.city)}</small>`) +
     block('Gastgeber', 'hosts', store.hosts, (h) => `${esc(h.name)} <small>${esc(h.role || '')}</small>`) +
-    block('Bewirtete Personen', 'guests', store.guests, (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`) +
+    blockIdx('Kunden / Geschäftspartner', 'guests', 'kunden', store.guests.map((g, i) => ({ g, i })).filter(({ g }) => !isEmp(g)), (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`) +
+    blockIdx('Mitarbeiter', 'guests', 'mitarbeiter', store.guests.map((g, i) => ({ g, i })).filter(({ g }) => isEmp(g)), (g) => `${esc(g.name)} <small>${esc(g.company || '')}</small>`, '<button type="button" class="ghost small" data-add-emp>+ Mitarbeiter hinzufügen</button>') +
     block('Anlässe', 'occasions', store.occasions, (o) => esc(o));
   const f = store.settings;
   if ($('firmaSum')) $('firmaSum').textContent = [f.company, f.city].filter(Boolean).join(', ') || 'Logo, Name und Adresse';
@@ -251,18 +271,31 @@ function matchSavedPlace(name, zip) {
 }
 
 // ---------- Gäste ----------
+// Für Ausdruck und PDF: erst Kunden, dann Mitarbeiter
+const sortedGuests = () => [...form.guests.filter((g) => !isEmp(g)), ...form.guests.filter(isEmp)];
 function pushGuest(g) {
-  form.guests.push({ name: g.name, company: g.company || '' });
+  if (!g) return;
+  form.guests.push(isEmp(g) ? { name: g.name, company: g.company || store.settings.company || '', kind: 'mitarbeiter' } : { name: g.name, company: g.company || '' });
   renderChips(); renderGuestLists(); changed();
 }
-async function addGuest() {
-  const v = await ask('Bewirtete Person hinzufügen', [{ label: 'Name *', required: true }, { label: 'Firma *', required: true }], 'Hinzufügen');
-  if (!v) return;
+async function addGuest(emp = false) {
+  const own = store.settings.company || '';
+  const v = emp
+    ? await ask('Mitarbeiter hinzufügen', [{ label: 'Name *', required: true }, { label: 'Firma', value: own }], 'Hinzufügen')
+    : await ask('Kunde / Geschäftspartner hinzufügen', [{ label: 'Name *', required: true }, { label: 'Firma *', required: true }], 'Hinzufügen');
+  if (!v) return null;
   const [name, company] = v;
-  if (!name || !company) { alertStatus('Name und Firma sind Pflichtfelder.'); return; }
-  let known = store.guests.find((g) => g.name.toLowerCase() === name.toLowerCase() && (g.company || '').toLowerCase() === company.toLowerCase());
-  if (!known) { known = { name, company }; store.guests.push(known); save(); renderStamm(); }
-  pushGuest(known);
+  if (!name || (!emp && !company)) { alertStatus(emp ? 'Bitte einen Namen eintragen.' : 'Name und Firma sind Pflichtfelder.'); return null; }
+  const g0 = emp ? { name, company: company || own, kind: 'mitarbeiter' } : { name, company };
+  let known = store.guests.find((g) => guestKey(g) === guestKey(g0));
+  if (!known) { known = g0; store.guests.push(known); save(); renderStamm(); }
+  return known;
+}
+function addAllEmployees() {
+  const list = availableGuests(true);
+  for (const { g } of list) form.guests.push({ name: g.name, company: g.company || store.settings.company || '', kind: 'mitarbeiter' });
+  renderChips(); renderGuestLists(); changed();
+  alertStatus(`✓ ${list.length} Mitarbeiter hinzugefügt`);
 }
 
 // ---------- Beträge ----------
@@ -532,7 +565,7 @@ function buildPrint() {
   if (!p.name) missing.push('Ort der Bewirtung');
   if (!host) missing.push('Gastgeber');
   if (!form.guests.length) missing.push('bewirtete Personen');
-  else if (form.guests.some((g) => !g.company)) missing.push('Firma bei ' + form.guests.filter((g) => !g.company).map((g) => g.name).join(', '));
+  else if (form.guests.some((g) => !isEmp(g) && !g.company)) missing.push('Firma bei ' + form.guests.filter((g) => !isEmp(g) && !g.company).map((g) => g.name).join(', '));
   if (!occasion) missing.push('Anlass');
   if (!c.gross) missing.push('Betrag');
 
@@ -547,7 +580,7 @@ function buildPrint() {
       <tr><th>Tag der Bewirtung</th><td>${esc([deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – ')) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
-      <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${form.guests.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
+      <tr><th>Bewirtete Personen</th><td>${form.guests.length ? `<ol>${sortedGuests().map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}${isEmp(g) ? ' (Mitarbeiter)' : ''}</span>` : ''}</li>`).join('')}</ol>` : '&nbsp;'}</td></tr>
       <tr><th>Teilnehmer gesamt</th><td>${participants} Person${participants === 1 ? '' : 'en'}${$('fHostAttends').checked && host ? ' (einschließlich Gastgeber)' : ''}</td></tr>
       <tr><th>Anlass der Bewirtung</th><td>${esc(occasion) || '&nbsp;'}</td></tr>
     </table>
@@ -604,7 +637,7 @@ function pdfData() {
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
-    guests: form.guests,
+    guests: sortedGuests(),
     persons: n,
     participants: `${n} Person${n === 1 ? '' : 'en'}${hostAttends ? ' (einschließlich Gastgeber)' : ''}`,
     occasion: [$('fOccasion').value, $('fOccasionNote').value.trim()].filter(Boolean).join(' – '),
@@ -701,12 +734,13 @@ async function saveFile(blob, name) {
 // ---------- Stammdaten als Excel-Datei (CSV) ----------
 // Eine Datei für alle Stammdaten; Spalte „Typ“ sagt, was die Zeile ist. Semikolon + UTF-8 mit BOM, damit Excel (DE) sie direkt öffnet.
 const CSV_COLS = ['Typ', 'Name', 'Firma', 'Funktion', 'Straße', 'PLZ', 'Ort', 'Land', 'Art'];
-const CSV_TYPES = { firma: 'Firma', gastgeber: 'Gastgeber', gast: 'Bewirtete Person', location: 'Location', anlass: 'Anlass' };
+const CSV_TYPES = { firma: 'Firma', gastgeber: 'Gastgeber', gast: 'Kunde', mitarbeiter: 'Mitarbeiter', location: 'Location', anlass: 'Anlass' };
 const typeKey = (t) => {
   const n = String(t || '').toLowerCase().replace(/[^a-zäöüß]/g, '');
   if (/^(firma|unternehmen|company|eigenefirma)$/.test(n)) return 'firma';
   if (/^(gastgeber|host)/.test(n)) return 'gastgeber';
-  if (/^(bewirteteperson(en)?|gast|gäste|gaeste|guests?|person(en)?)$/.test(n)) return 'gast';
+  if (/^(mitarbeiter(in|innen)?|employees?|staff|kollegen?|kollegin)$/.test(n)) return 'mitarbeiter';
+  if (/^(kunden?|kundin|geschäftspartner(in)?|geschaeftspartner|customers?|bewirteteperson(en)?|gast|gäste|gaeste|guests?|person(en)?)$/.test(n)) return 'gast';
   if (/^(locations?|ort|orte|restaurant|hotel|place)$/.test(n)) return 'location';
   if (/^(anlass|anlässe|anlaesse|occasions?)$/.test(n)) return 'anlass';
   return '';
@@ -722,7 +756,8 @@ function stammRows() {
   const f = store.settings, rows = [CSV_COLS];
   if (f.company || f.street || f.city) rows.push([CSV_TYPES.firma, f.company, '', '', f.street, f.zip, f.city, f.country || 'DE', '']);
   for (const h of store.hosts) rows.push([CSV_TYPES.gastgeber, h.name, '', h.role || '', '', '', '', '', '']);
-  for (const g of store.guests) rows.push([CSV_TYPES.gast, g.name, g.company || '', '', '', '', '', '', '']);
+  for (const g of store.guests.filter((x) => !isEmp(x))) rows.push([CSV_TYPES.gast, g.name, g.company || '', '', '', '', '', '', '']);
+  for (const g of store.guests.filter(isEmp)) rows.push([CSV_TYPES.mitarbeiter, g.name, g.company || '', '', '', '', '', '', '']);
   for (const p of store.places) rows.push([CSV_TYPES.location, p.name, '', '', p.street, p.zip, p.city, p.country || 'DE', p.type || 'Restaurant']);
   for (const o of store.occasions) rows.push([CSV_TYPES.anlass, o, '', '', '', '', '', '', '']);
   return rows;
@@ -735,10 +770,11 @@ function exportStore() {
 function downloadTemplate() {
   const rows = [CSV_COLS,
     ['# Vorlage: Zeilen mit # werden beim Import ignoriert. Beispielzeilen kopieren, # in der Spalte Typ entfernen und Werte ersetzen.'],
-    ['# Typ = Firma, Gastgeber, Bewirtete Person, Location oder Anlass. Land als Kürzel (DE, AT, CH …). Art = Restaurant, Hotel oder Sonstiges.'],
+    ['# Typ = Firma, Gastgeber, Kunde, Mitarbeiter, Location oder Anlass. Land als Kürzel (DE, AT, CH …). Art = Restaurant, Hotel oder Sonstiges.'],
     ['#Firma', 'Muster GmbH', '', '', 'Hauptstraße 1', '20095', 'Hamburg', 'DE', ''],
     ['#Gastgeber', 'Erika Muster', '', 'Geschäftsführerin', '', '', '', '', ''],
-    ['#Bewirtete Person', 'Max Beispiel', 'Beispiel AG', '', '', '', '', '', ''],
+    ['#Kunde', 'Max Beispiel', 'Beispiel AG', '', '', '', '', '', ''],
+    ['#Mitarbeiter', 'Anna Muster', 'Muster GmbH', '', '', '', '', '', ''],
     ['#Location', 'Restaurant Beispiel', '', '', 'Marktplatz 3', '80331', 'München', 'DE', 'Restaurant'],
     ['#Anlass', 'Projektbesprechung', '', '', '', '', '', '', ''],
   ];
@@ -770,7 +806,7 @@ function importCsv(text) {
     strasse: col('straße', 'strasse', 'street', 'straßehausnummer'), plz: col('plz', 'postleitzahl', 'zip'), ort: col('ort', 'stadt', 'city'), land: col('land', 'country'), art: col('art', 'kategorie') };
   if (ix.typ < 0 || ix.name < 0) throw new Error('Spalten „Typ“ und „Name“ fehlen');
   const get = (r, k) => (ix[k] >= 0 ? String(r[ix[k]] ?? '').trim() : '');
-  const n = { firma: 0, gastgeber: 0, gast: 0, location: 0, anlass: 0 }; let skipped = 0;
+  const n = { firma: 0, gastgeber: 0, gast: 0, mitarbeiter: 0, location: 0, anlass: 0 }; let skipped = 0;
   for (const r of rows.slice(1)) {
     const typRaw = String(r[ix.typ] ?? '').trim();
     if (!typRaw || typRaw.startsWith('#')) continue;
@@ -783,9 +819,10 @@ function importCsv(text) {
     } else if (t === 'gastgeber') {
       const h = store.hosts.find((x) => x.name.toLowerCase() === name.toLowerCase());
       if (h) { if (get(r, 'funktion')) h.role = get(r, 'funktion'); } else { store.hosts.push({ id: uid(), name, role: get(r, 'funktion') }); n.gastgeber++; }
-    } else if (t === 'gast') {
-      const company = get(r, 'firma');
-      if (!store.guests.some((g) => g.name.toLowerCase() === name.toLowerCase() && (g.company || '').toLowerCase() === company.toLowerCase())) { store.guests.push({ name, company }); n.gast++; }
+    } else if (t === 'gast' || t === 'mitarbeiter') {
+      const emp = t === 'mitarbeiter';
+      const g0 = emp ? { name, company: get(r, 'firma') || store.settings.company || '', kind: 'mitarbeiter' } : { name, company: get(r, 'firma') };
+      if (!store.guests.some((g) => guestKey(g) === guestKey(g0))) { store.guests.push(g0); n[t]++; }
     } else if (t === 'location') {
       const p = { type: get(r, 'art') || 'Restaurant', name, street: get(r, 'strasse'), country: countryCode(get(r, 'land')) || 'DE', zip: get(r, 'plz'), city: get(r, 'ort') };
       const ex = store.places.find((x) => x.name.toLowerCase() === name.toLowerCase() && (x.city || '').toLowerCase() === p.city.toLowerCase());
@@ -804,7 +841,7 @@ async function importStore(file) {
     if (/^\s*[{[]/.test(text.replace(/^﻿/, ''))) { importJson(JSON.parse(text)); st.textContent = '✓ Stammdaten importiert'; return; }
     const { n, skipped } = importCsv(text);
     save(); renderAll(); loadSettings();
-    const parts = [n.gastgeber && `${n.gastgeber} Gastgeber`, n.gast && `${n.gast} bewirtete Person${n.gast === 1 ? '' : 'en'}`, n.location && `${n.location} Location${n.location === 1 ? '' : 's'}`, n.anlass && `${n.anlass} Anlass${n.anlass === 1 ? '' : 'e'}`.replace('Anlasse', 'Anlässe'), n.firma && 'Firmendaten'].filter(Boolean);
+    const parts = [n.gastgeber && `${n.gastgeber} Gastgeber`, n.gast && `${n.gast} Kunde${n.gast === 1 ? '' : 'n'}`, n.mitarbeiter && `${n.mitarbeiter} Mitarbeiter`, n.location && `${n.location} Location${n.location === 1 ? '' : 's'}`, n.anlass && `${n.anlass} Anlass${n.anlass === 1 ? '' : 'e'}`.replace('Anlasse', 'Anlässe'), n.firma && 'Firmendaten'].filter(Boolean);
     st.textContent = (parts.length ? `✓ Importiert: ${parts.join(', ')}.` : 'Keine neuen Einträge gefunden.') + (skipped ? ` ${skipped} Zeile${skipped === 1 ? '' : 'n'} übersprungen (Typ unbekannt oder Name fehlt).` : '');
   } catch (e) { st.textContent = 'Import fehlgeschlagen: ' + (e.message && e.message !== 'leer' ? e.message : 'keine gültige Datei') + '.'; }
 }
@@ -900,7 +937,11 @@ function bind() {
     store.hosts.push(h); store.settings.lastHostId = h.id; save();
     renderHosts(); $('fHost').value = h.id; renderStamm(); changed();
   };
-  $('btnAddGuest').onclick = addGuest;
+  $('btnAddGuest').onclick = async () => pushGuest(await addGuest(false));
+  $('btnAddEmp').onclick = async () => pushGuest(await addGuest(true));
+  $('btnAllEmp').onclick = addAllEmployees;
+  $('fEmpSel').addEventListener('change', () => { const g = store.guests[Number($('fEmpSel').value)]; $('fEmpSel').value = ''; pushGuest(g); });
+  $('fHost').addEventListener('change', renderGuestLists);
   $('fGuestSel').addEventListener('change', async () => {
     const g = store.guests[Number($('fGuestSel').value)];
     $('fGuestSel').value = '';
@@ -947,6 +988,7 @@ function bind() {
   $('btnLogoDel').onclick = () => { store.settings.logo = ''; save(); renderLogo(); };
   $('stammLists').addEventListener('click', (e) => {
     const ed = e.target.closest('[data-edit]'); if (ed) return editLocation(ed.dataset.edit);
+    if (e.target.closest('[data-add-emp]')) { stammOpen.add('mitarbeiter'); return addGuest(true).then(() => { renderGuestLists(); renderStamm(); }); }
     const b = e.target.closest('button.x'); if (!b) return;
     store[b.dataset.kind].splice(Number(b.dataset.i), 1); save(); renderAll();
   });

@@ -321,3 +321,7 @@ details.fold > summary::after { content: '›'; font-size: 22px; color: var(--mu
 details.fold[open] > summary::after { transform: rotate(90deg); }
 details.fold > .fold-body { padding: 0 16px 14px; }
 .stamm details.fold { margin-bottom: 0; }
+.sub-label { font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+.chip.emp-chip { background: var(--card); border: 1px dashed var(--accent); }
+button.all-emp { margin-top: 8px; width: 100%; }
+.mt-s { margin-top: 10px; }

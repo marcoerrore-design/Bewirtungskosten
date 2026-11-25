@@ -137,12 +137,19 @@
     </label>
     <label class="check"><input type="checkbox" id="fHostAttends" checked> Gastgeber hat an der Bewirtung teilgenommen</label>
 
-    <div class="field-label">Bewirtete Personen <span class="req">Pflicht: Name und Firma</span></div>
+    <div class="field-label">Bewirtete Personen <span class="req">Kunden: Name und Firma Pflicht</span></div>
     <div class="chips" id="guestChips"></div>
+    <div class="sub-label">Kunden / Geschäftspartner</div>
     <div class="combo">
-      <select id="fGuestSel" aria-label="Bewirtete Person auswählen"></select>
+      <select id="fGuestSel" aria-label="Kunden auswählen"></select>
       <button type="button" class="ghost small" id="btnAddGuest">+ hinzufügen</button>
     </div>
+    <div class="sub-label">Mitarbeiter</div>
+    <div class="combo">
+      <select id="fEmpSel" aria-label="Mitarbeiter auswählen"></select>
+      <button type="button" class="ghost small" id="btnAddEmp">+ hinzufügen</button>
+    </div>
+    <button type="button" class="ghost small all-emp" id="btnAllEmp">Alle Mitarbeiter hinzufügen</button>
 
     <label>Anlass der Bewirtung
       <div class="combo">
@@ -239,7 +246,7 @@
   <div class="stamm" id="stammLists"></div>
   <section class="card">
     <h2>Stammdaten als Excel-Datei (CSV)</h2>
-    <p class="hint">Alle Stammdaten (Firma, Gastgeber, bewirtete Personen, Locations und Anlässe) in einer Datei, die sich mit Excel öffnen und bearbeiten lässt. Beim Import werden neue Einträge ergänzt, vorhandene bleiben erhalten. Das Logo ist nicht enthalten.</p>
+    <p class="hint">Alle Stammdaten (Firma, Gastgeber, Kunden, Mitarbeiter, Locations und Anlässe) in einer Datei, die sich mit Excel öffnen und bearbeiten lässt. Beim Import werden neue Einträge ergänzt, vorhandene bleiben erhalten. Das Logo ist nicht enthalten.</p>
     <div class="row-actions start">
       <button type="button" class="small" id="btnExport">Als Excel (CSV) exportieren</button>
       <label class="ghost small file-btn">Aus Excel (CSV) importieren<input type="file" id="importFile" accept=".csv,text/csv,application/json,.json,text/plain"></label>
