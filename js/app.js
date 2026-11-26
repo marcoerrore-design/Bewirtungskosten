@@ -192,6 +192,7 @@ function renderChips() {
 // Stammdaten in den Einstellungen: jede Liste einzeln aufklappbar (Zustand bleibt beim Neuzeichnen erhalten)
 const stammOpen = new Set();
 function renderStamm() {
+  renderPlaceNames();
   const block = (title, kind, items, label) => `
     <details class="card fold" data-fold="${kind}" ${stammOpen.has(kind) ? 'open' : ''}>
       <summary><span><b>${title}</b><small>${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}</small></span></summary>
@@ -220,6 +221,30 @@ function placeFromFields() {
     country: $('fCountry').value, zip: $('fZip').value.trim(), city: $('fCity').value.trim(),
   };
 }
+// ---------- 2. Location (optional) ----------
+function place2FromFields() {
+  return { name: $('f2Location').value.trim(), street: $('f2Street').value.trim(), zip: $('f2Zip').value.trim(), city: $('f2City').value.trim() };
+}
+const hasPlace2 = () => Object.values(place2FromFields()).some(Boolean);
+function showLoc2(on) {
+  $('loc2Box').hidden = !on; $('btnLoc2Add').hidden = on;
+}
+function renderPlaceNames() {
+  $('placeNames').innerHTML = store.places.map((p) => `<option value="${esc(p.name)}">${esc([p.zip, p.city].filter(Boolean).join(' '))}</option>`).join('');
+}
+function onLoc2Name() {
+  const p = store.places.find((x) => x.name.toLowerCase() === $('f2Location').value.trim().toLowerCase());
+  if (!p) return;
+  if (!$('f2Street').value) $('f2Street').value = p.street || '';
+  if (!$('f2Zip').value) $('f2Zip').value = p.zip || '';
+  if (!$('f2City').value) $('f2City').value = p.city || '';
+}
+async function onLoc2Zip() {
+  const cc = $('fCountry').value, z = $('f2Zip').value;
+  if (!isComplete(cc, z) || $('f2City').value.trim()) return;
+  try { const cities = await lookup(cc, z); if (cities[0] && !$('f2City').value.trim()) { $('f2City').value = cities[0]; changed(); } } catch {}
+}
+const place2Line = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 function fillPlace(p) {
   $('fPlaceType').value = p.type || 'Restaurant';
   $('fLocation').value = p.name || '';
@@ -469,7 +494,7 @@ async function addFiles(files, { target = null, crop = false } = {}) {
       if (!r.pdfText.trim()) added.push(...r.pages.map((pg) => [b, pg]));
       // Alle Seiten in Schwarz-Weiß mit mehr Kontrast; das farbige Original bleibt für späteres Zuschneiden
       if (window.Crop) for (const pg of r.pages) {
-        try { pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, null); } catch (e) { console.warn(e); delete pg.orig; }
+        try { pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, null); pg.bw = true; } catch (e) { console.warn(e); delete pg.orig; }
       }
       if (!touched.includes(b)) touched.push(b);
     }
@@ -486,7 +511,7 @@ async function addFiles(files, { target = null, crop = false } = {}) {
   else if (window.Crop && added.length) {
     $('ocrStatus').textContent = 'Schneide Beleg zu …';
     for (const [, pg] of added) {
-      try { const c = await window.Crop.auto(pg.orig || pg.src); if (c) { if (!pg.orig) pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, c); pg.crop = c; } } catch (e) { console.warn(e); }
+      try { const c = await window.Crop.auto(pg.orig || pg.src); if (c) { if (!pg.orig) pg.orig = pg.src; pg.src = await window.Crop.render(pg.orig, c); pg.crop = c; pg.bw = true; } } catch (e) { console.warn(e); }
     }
     renderBelege(); changed();
   }
@@ -506,9 +531,25 @@ async function cropPage(bid, pi, rerun = true) {
     if (!pg.orig) pg.orig = pg.src;
     pg.src = res.src; pg.crop = c;
   }
+  pg.bw = true;
   renderBelege(); changed();
   if (rerun && !(pg.pdf && hasPdfText(b))) runOcr([b]);
   return true;
+}
+// Belegseiten, die noch nicht in Schwarz-Weiß sind (ältere Abrechnungen, ältere App-Version), umwandeln
+async function convertToBw() {
+  if (!window.Crop) return;
+  let n = 0;
+  for (const b of form.belege) for (const pg of b.pages) {
+    if (pg.bw) continue;
+    try {
+      // Frühere Version hat schon ein Graustufenbild erzeugt: vom farbigen Original neu rechnen
+      const base = pg.orig || pg.src;
+      pg.src = await window.Crop.render(base, pg.crop || null);
+      pg.orig = base; pg.bw = true; n++;
+    } catch (e) { console.warn(e); }
+  }
+  if (n) { renderBelege(); changed(); }
 }
 function renderBelege() {
   const n = form.belege.length;
@@ -776,6 +817,7 @@ function buildPrint() {
     <table class="p-facts">
       <tr><th>Tag der Bewirtung</th><td>${esc([deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – ')) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
+      ${hasPlace2() ? (() => { const q = place2FromFields(); return `<tr><th>2. Ort der Bewirtung</th><td><b>${esc(q.name)}</b>${place2Line(q) ? '<br>' + esc(place2Line(q)) : ''}</td></tr>`; })() : ''}
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
       ${(() => {
         const li = (arr) => `<ol>${arr.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>`;
@@ -858,6 +900,7 @@ function pdfData() {
     date: deDate($('fDate').value),
     dateLong: [deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – '),
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
+    place2: hasPlace2() ? place2FromFields() : null,
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
     guests: sortedGuests(),
@@ -931,7 +974,8 @@ function showPdfReady() {
 let sig;
 function resetForm() {
   form = freshForm();
-  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
+  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
+  showLoc2(false);
   $('fPlaceType').value = 'Restaurant'; $('fMeal').value = ''; $('fCountry').value = 'DE'; $('fOccasion').value = '';
   $('fSignPlace').value = ''; $('fSignDate').value = todayIso();
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
@@ -1172,6 +1216,10 @@ function bind() {
   document.addEventListener('click', (e) => { if (locOpen && !$('locBox').contains(e.target)) openLoc(false); });
   $('fPlaceType').addEventListener('change', updateLocState);
   $('btnSavePlace').onclick = savePlace;
+  $('btnLoc2Add').onclick = () => { showLoc2(true); $('f2Location').focus(); };
+  $('btnLoc2Del').onclick = () => { for (const id of ['f2Location', 'f2Street', 'f2Zip', 'f2City']) $(id).value = ''; showLoc2(false); changed(); };
+  $('f2Location').addEventListener('change', () => { onLoc2Name(); changed(); });
+  $('f2Zip').addEventListener('input', onLoc2Zip);
   $('btnDelPlace').onclick = () => { if (form.locationId) deleteLocation(form.locationId); };
   $('fZip').addEventListener('input', onZipInput);
   $('fCountry').addEventListener('change', () => { onZipInput(); updateAmounts(); });
@@ -1269,7 +1317,7 @@ function bind() {
 }
 
 // ---------- Abrechnungen speichern (IndexedDB) ----------
-const FIELD_IDS = ['fDate', 'fPlaceType', 'fMeal', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'fHost', 'fOccasion', 'fOccasionNote',
+const FIELD_IDS = ['fDate', 'fPlaceType', 'fMeal', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'fHost', 'fOccasion', 'fOccasionNote',
   'a19', 'a7', 'a0', 'aTip', 'aFee', 'fSignPlace', 'fSignDate'];
 const CHECK_IDS = ['fHostAttends', 'fFeeFull'];
 const CUR_KEY = 'bewirtung.currentReport';
@@ -1381,6 +1429,8 @@ async function openReport(id) {
   sig.set(r.signature || null);
   if (r.rawText) { $('rawText').textContent = r.rawText; $('rawBox').hidden = false; }
   renderBelege(); renderChips(); updateAmounts(); updateLocState();
+  showLoc2(hasPlace2());
+  convertToBw();
   restoring = false;
   try { localStorage.setItem(CUR_KEY, r.id); } catch {}
   $('editTitle').textContent = 'Abrechnung bearbeiten';
@@ -1422,7 +1472,7 @@ function stepState() {
   const occ = $('fOccasion').value;
   return {
     1: { done: form.belege.length > 0, sum: form.belege.length ? [plural(form.belege.length, 'Beleg', 'Belege'), hasTotals() ? eur.format(belegSum()) : ''].filter(Boolean).join(' · ') : 'Foto oder PDF hinzufügen' },
-    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim(), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
+    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim() + (place2FromFields().name ? ' + ' + place2FromFields().name : ''), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
     3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} ${form.guests.length === 1 ? 'Gast' : 'Gäste'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
     4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },
     5: { done: !!form.signature, sum: form.signature ? `unterschrieben${$('fSignPlace').value ? ', ' + $('fSignPlace').value : ''}` : 'optional, sonst von Hand' },

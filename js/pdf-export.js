@@ -59,6 +59,7 @@ async function build(d) {
   const p = d.place;
   fact('Tag der Bewirtung', [d.dateLong || d.date || '']);
   fact('Ort der Bewirtung' + (p.type ? ` (${p.type})` : ''), [p.name, p.street, [p.zip, p.city].filter(Boolean).join(' ') + (p.countryName ? ', ' + p.countryName : '')].filter((x) => x && x.trim()), true);
+  if (d.place2) fact('2. Ort der Bewirtung', [d.place2.name, d.place2.street, [d.place2.zip, d.place2.city].filter(Boolean).join(' ')].filter((x) => x && x.trim()), true);
   fact('Gastgeber', [d.host || '']);
   // Bewirtete Personen getrennt nach Kunden/Gästen und Mitarbeitern
   const kunden = d.guests.filter((g) => g.kind !== 'mitarbeiter'), mitarb = d.guests.filter((g) => g.kind === 'mitarbeiter');

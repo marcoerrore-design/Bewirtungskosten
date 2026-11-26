@@ -83,19 +83,32 @@ async function render(origSrc, crop) {
   blackWhite(out);
   return out.toDataURL('image/jpeg', 0.9);
 }
-// Schwarz-Weiß mit gestrecktem Kontrast: Papier wird weiß, Schrift dunkel (besser für die Texterkennung)
+// Schwarz-Weiß wie ein Scan: Helligkeit mit der Umgebung vergleichen (gleicht Schatten aus),
+// Papier wird weiß, Schrift schwarz – gut lesbar und besser für die Texterkennung
 function blackWhite(cv) {
-  const ctx = cv.getContext('2d'), img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data, n = d.length / 4;
-  const lum = new Uint8Array(n), hist = new Uint32Array(256);
-  for (let i = 0; i < n; i++) { const v = (d[i * 4] * 299 + d[i * 4 + 1] * 587 + d[i * 4 + 2] * 114) / 1000 | 0; lum[i] = v; hist[v]++; }
-  const pct = (q) => { let c = 0; for (let v = 0; v < 256; v++) { c += hist[v]; if (c >= n * q) return v; } return 255; };
-  const lo = pct(0.01), hi = Math.max(lo + 40, pct(0.9));
-  const map = new Uint8Array(256);
-  for (let v = 0; v < 256; v++) {
-    const t = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
-    map[v] = Math.round(255 * Math.pow(t, 1.3)); // etwas dunklere Mitteltöne: Schrift kräftiger
+  const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, n = W * H;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i++) lum[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+  // Summenbild für schnelle Mittelwerte
+  const S = new Float64Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) { row += lum[y * W + x]; S[(y + 1) * (W + 1) + x + 1] = S[y * (W + 1) + x + 1] + row; }
   }
-  for (let i = 0; i < n; i++) { const v = map[lum[i]]; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; }
+  const r = Math.max(8, Math.round(Math.min(W, H) / 20));
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1);
+      const mean = (S[y1 * (W + 1) + x1] - S[y0 * (W + 1) + x1] - S[y1 * (W + 1) + x0] + S[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+      const ratio = lum[y * W + x] / (mean + 1);
+      const t = Math.min(1, Math.max(0, (ratio - 0.72) / 0.2));
+      const v = Math.round(255 * t * t * (3 - 2 * t)); // weicher Übergang, Kanten bleiben glatt
+      const i = y * W + x;
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v;
+    }
+  }
   ctx.putImageData(img, 0, 0);
 }
 

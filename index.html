@@ -122,6 +122,18 @@
       <button type="button" class="ghost small danger" id="btnDelPlace" hidden>Location löschen</button>
       <button type="button" class="small" id="btnSavePlace">Location speichern</button>
     </div>
+    <button type="button" class="ghost small loc2-add" id="btnLoc2Add">+ 2. Location hinzufügen</button>
+    <div class="loc2" id="loc2Box" hidden>
+      <div class="loc2-head"><b>2. Location</b><button type="button" class="ghost small danger" id="btnLoc2Del">Entfernen</button></div>
+      <p class="hint">z. B. Essen im Restaurant, danach Getränke in der Bar. Die Beträge beider Locations werden über die Belege zusammengerechnet.</p>
+      <label>Location<input id="f2Location" autocomplete="off" list="placeNames" placeholder="Location wählen oder neu eintippen"></label>
+      <datalist id="placeNames"></datalist>
+      <label>Straße, Hausnummer<input id="f2Street" autocomplete="off"></label>
+      <div class="grid g2">
+        <label>PLZ<input id="f2Zip" autocomplete="off" inputmode="numeric"></label>
+        <label>Ort<input id="f2City" autocomplete="off"></label>
+      </div>
+    </div>
       <div class="step-next"><button type="button" class="primary" data-next="3">Weiter</button></div>
     </div>
   </section>
@@ -278,7 +290,7 @@
     </div>
     <p class="status" id="delYearStatus"></p>
   </section>
-  <p class="hint app-version">App-Version 26 · Mehrere Belege, Zuschneiden, Schwarz-Weiß</p>
+  <p class="hint app-version">App-Version 27 · Mehrere Belege, Zuschneiden, Schwarz-Weiß, 2. Location</p>
 </div>
 </main>
 
