@@ -1,5 +1,5 @@
 // Service Worker: App offline verfügbar machen. Bei jeder Änderung VERSION erhöhen.
-const VERSION = 'bewirtung-v28';
+const VERSION = 'bewirtung-v29';
 const CORE = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/receipt.js', 'js/plz.js', 'js/db.js', 'js/vma.js', 'js/crop.js', 'js/pdf-export.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/apple-touch-icon.png',

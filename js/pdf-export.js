@@ -152,7 +152,9 @@ async function build(d) {
     y += 14; ink(); doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     fact('Reisetag', [d.dateLong || d.date || '']);
-    fact('Ort der Mahlzeit', [p.name, [p.zip, p.city].filter(Boolean).join(' ') + (v.countryFull ? ', ' + v.countryFull : '')].filter((x) => x && x.trim()), true);
+    const extra = d.extraPlaces || [];
+    fact(extra.length ? '1. Ort der Mahlzeit' : 'Ort der Mahlzeit', [p.name, p.street, [p.zip, p.city].filter(Boolean).join(' ') + (v.countryFull ? ', ' + v.countryFull : '')].filter((x) => x && x.trim()), true);
+    extra.forEach((q, i) => fact(`${i + 2}. Ort der Mahlzeit`, [q.name, q.street, [q.zip, q.city].filter(Boolean).join(' ')].filter((x) => x && x.trim()), true));
     if (v.rate) fact('Maßgebliche Pauschale', [`${v.placeLabel} (Stand ${v.rate.year})`]);
     fact('Mahlzeit', [v.meal ? (v.meal === 'Brunch' ? 'Brunch (wird als Frühstück gekürzt)' : v.meal) : 'nicht angegeben']);
 
