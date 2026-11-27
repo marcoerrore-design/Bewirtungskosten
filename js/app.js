@@ -221,30 +221,43 @@ function placeFromFields() {
     country: $('fCountry').value, zip: $('fZip').value.trim(), city: $('fCity').value.trim(),
   };
 }
-// ---------- 2. Location (optional) ----------
-function place2FromFields() {
-  return { name: $('f2Location').value.trim(), street: $('f2Street').value.trim(), zip: $('f2Zip').value.trim(), city: $('f2City').value.trim() };
+// ---------- 2. und 3. Location (optional) ----------
+const EXTRA = [2, 3];
+const LOC_KEYS = ['Location', 'Street', 'Zip', 'City'];
+function placeKFromFields(k) {
+  return { name: $(`f${k}Location`).value.trim(), street: $(`f${k}Street`).value.trim(), zip: $(`f${k}Zip`).value.trim(), city: $(`f${k}City`).value.trim() };
 }
-const hasPlace2 = () => Object.values(place2FromFields()).some(Boolean);
-function showLoc2(on) {
-  $('loc2Box').hidden = !on; $('btnLoc2Add').hidden = on;
+const hasPlaceK = (k) => Object.values(placeKFromFields(k)).some(Boolean);
+const extraPlaces = () => EXTRA.filter(hasPlaceK).map((k) => ({ no: k, ...placeKFromFields(k) }));
+function syncLocBoxes(open = {}) {
+  const on2 = !!open[2] || hasPlaceK(2) || !$('loc2Box').hidden && open[2] !== false;
+  const on3 = on2 && (!!open[3] || hasPlaceK(3) || !$('loc3Box').hidden && open[3] !== false);
+  $('loc2Box').hidden = !on2; $('btnLoc2Add').hidden = on2;
+  $('loc3Box').hidden = !on3; $('btnLoc3Add').hidden = !on2 || on3;
+}
+function clearLoc(k) { for (const key of LOC_KEYS) $(`f${k}${key}`).value = ''; }
+function removeLoc(k) {
+  // 2. entfernen: die 3. rückt nach
+  if (k === 2 && hasPlaceK(3)) { for (const key of LOC_KEYS) $(`f2${key}`).value = $(`f3${key}`).value; clearLoc(3); syncLocBoxes({ 3: false }); }
+  else { clearLoc(k); syncLocBoxes({ [k]: false, ...(k === 2 ? { 3: false } : {}) }); }
+  changed();
 }
 function renderPlaceNames() {
   $('placeNames').innerHTML = store.places.map((p) => `<option value="${esc(p.name)}">${esc([p.zip, p.city].filter(Boolean).join(' '))}</option>`).join('');
 }
-function onLoc2Name() {
-  const p = store.places.find((x) => x.name.toLowerCase() === $('f2Location').value.trim().toLowerCase());
+function onLocKName(k) {
+  const p = store.places.find((x) => x.name.toLowerCase() === $(`f${k}Location`).value.trim().toLowerCase());
   if (!p) return;
-  if (!$('f2Street').value) $('f2Street').value = p.street || '';
-  if (!$('f2Zip').value) $('f2Zip').value = p.zip || '';
-  if (!$('f2City').value) $('f2City').value = p.city || '';
+  if (!$(`f${k}Street`).value) $(`f${k}Street`).value = p.street || '';
+  if (!$(`f${k}Zip`).value) $(`f${k}Zip`).value = p.zip || '';
+  if (!$(`f${k}City`).value) $(`f${k}City`).value = p.city || '';
 }
-async function onLoc2Zip() {
-  const cc = $('fCountry').value, z = $('f2Zip').value;
-  if (!isComplete(cc, z) || $('f2City').value.trim()) return;
-  try { const cities = await lookup(cc, z); if (cities[0] && !$('f2City').value.trim()) { $('f2City').value = cities[0]; changed(); } } catch {}
+async function onLocKZip(k) {
+  const cc = $('fCountry').value, z = $(`f${k}Zip`).value, city = $(`f${k}City`);
+  if (!isComplete(cc, z) || city.value.trim()) return;
+  try { const cities = await lookup(cc, z); if (cities[0] && !city.value.trim()) { city.value = cities[0]; changed(); } } catch {}
 }
-const place2Line = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+const placeLine = (p) => [p.street, [p.zip, p.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 function fillPlace(p) {
   $('fPlaceType').value = p.type || 'Restaurant';
   $('fLocation').value = p.name || '';
@@ -817,7 +830,7 @@ function buildPrint() {
     <table class="p-facts">
       <tr><th>Tag der Bewirtung</th><td>${esc([deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – ')) || '&nbsp;'}</td></tr>
       <tr><th>Ort der Bewirtung${p.type ? ` (${esc(p.type)})` : ''}</th><td><b>${esc(p.name)}</b><br>${esc(p.street)}${p.street ? '<br>' : ''}${esc(p.zip)} ${esc(p.city)}${country && p.country !== 'DE' ? ', ' + esc(country.name) : ''}</td></tr>
-      ${hasPlace2() ? (() => { const q = place2FromFields(); return `<tr><th>2. Ort der Bewirtung</th><td><b>${esc(q.name)}</b>${place2Line(q) ? '<br>' + esc(place2Line(q)) : ''}</td></tr>`; })() : ''}
+      ${extraPlaces().map((q, i) => `<tr><th>${i + 2}. Ort der Bewirtung</th><td><b>${esc(q.name)}</b>${placeLine(q) ? '<br>' + esc(placeLine(q)) : ''}</td></tr>`).join('')}
       <tr><th>Gastgeber</th><td>${host ? esc(host.name) + (host.role ? `, ${esc(host.role)}` : '') : '&nbsp;'}</td></tr>
       ${(() => {
         const li = (arr) => `<ol>${arr.map((g) => `<li>${esc(g.name)}${g.company ? ` <span class="p-muted">– ${esc(g.company)}</span>` : ''}</li>`).join('')}</ol>`;
@@ -900,7 +913,7 @@ function pdfData() {
     date: deDate($('fDate').value),
     dateLong: [deDateLong($('fDate').value), $('fMeal').value].filter(Boolean).join(' – '),
     place: { ...p, countryName: country && p.country !== 'DE' ? country.name : '' },
-    place2: hasPlace2() ? place2FromFields() : null,
+    extraPlaces: extraPlaces(),
     host: host ? host.name + (host.role ? `, ${host.role}` : '') : '',
     hostName: host ? host.name : '',
     guests: sortedGuests(),
@@ -974,8 +987,8 @@ function showPdfReady() {
 let sig;
 function resetForm() {
   form = freshForm();
-  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
-  showLoc2(false);
+  for (const id of ['fDate', 'fLocation', 'fStreet', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'f3Location', 'f3Street', 'f3Zip', 'f3City', 'fOccasionNote', 'a19', 'a7', 'a0', 'aTip', 'aFee']) $(id).value = '';
+  syncLocBoxes({ 2: false, 3: false });
   $('fPlaceType').value = 'Restaurant'; $('fMeal').value = ''; $('fCountry').value = 'DE'; $('fOccasion').value = '';
   $('fSignPlace').value = ''; $('fSignDate').value = todayIso();
   updateLocState(); openLoc(false); $('rawBox').hidden = true; $('ocrStatus').textContent = ''; $('plzStatus').textContent = '';
@@ -1216,10 +1229,12 @@ function bind() {
   document.addEventListener('click', (e) => { if (locOpen && !$('locBox').contains(e.target)) openLoc(false); });
   $('fPlaceType').addEventListener('change', updateLocState);
   $('btnSavePlace').onclick = savePlace;
-  $('btnLoc2Add').onclick = () => { showLoc2(true); $('f2Location').focus(); };
-  $('btnLoc2Del').onclick = () => { for (const id of ['f2Location', 'f2Street', 'f2Zip', 'f2City']) $(id).value = ''; showLoc2(false); changed(); };
-  $('f2Location').addEventListener('change', () => { onLoc2Name(); changed(); });
-  $('f2Zip').addEventListener('input', onLoc2Zip);
+  for (const k of EXTRA) {
+    $(`btnLoc${k}Add`).onclick = () => { syncLocBoxes({ [k]: true }); $(`f${k}Location`).focus(); };
+    $(`btnLoc${k}Del`).onclick = () => removeLoc(k);
+    $(`f${k}Location`).addEventListener('change', () => { onLocKName(k); changed(); });
+    $(`f${k}Zip`).addEventListener('input', () => onLocKZip(k));
+  }
   $('btnDelPlace').onclick = () => { if (form.locationId) deleteLocation(form.locationId); };
   $('fZip').addEventListener('input', onZipInput);
   $('fCountry').addEventListener('change', () => { onZipInput(); updateAmounts(); });
@@ -1317,7 +1332,7 @@ function bind() {
 }
 
 // ---------- Abrechnungen speichern (IndexedDB) ----------
-const FIELD_IDS = ['fDate', 'fPlaceType', 'fMeal', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'fHost', 'fOccasion', 'fOccasionNote',
+const FIELD_IDS = ['fDate', 'fPlaceType', 'fMeal', 'fLocation', 'fStreet', 'fCountry', 'fZip', 'fCity', 'f2Location', 'f2Street', 'f2Zip', 'f2City', 'f3Location', 'f3Street', 'f3Zip', 'f3City', 'fHost', 'fOccasion', 'fOccasionNote',
   'a19', 'a7', 'a0', 'aTip', 'aFee', 'fSignPlace', 'fSignDate'];
 const CHECK_IDS = ['fHostAttends', 'fFeeFull'];
 const CUR_KEY = 'bewirtung.currentReport';
@@ -1429,7 +1444,7 @@ async function openReport(id) {
   sig.set(r.signature || null);
   if (r.rawText) { $('rawText').textContent = r.rawText; $('rawBox').hidden = false; }
   renderBelege(); renderChips(); updateAmounts(); updateLocState();
-  showLoc2(hasPlace2());
+  syncLocBoxes({ 2: hasPlaceK(2) || hasPlaceK(3), 3: hasPlaceK(3) });
   convertToBw();
   restoring = false;
   try { localStorage.setItem(CUR_KEY, r.id); } catch {}
@@ -1472,7 +1487,7 @@ function stepState() {
   const occ = $('fOccasion').value;
   return {
     1: { done: form.belege.length > 0, sum: form.belege.length ? [plural(form.belege.length, 'Beleg', 'Belege'), hasTotals() ? eur.format(belegSum()) : ''].filter(Boolean).join(' · ') : 'Foto oder PDF hinzufügen' },
-    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, $('fLocation').value.trim() + (place2FromFields().name ? ' + ' + place2FromFields().name : ''), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
+    2: { done: !!($('fDate').value && $('fLocation').value.trim()), sum: [deDate($('fDate').value), $('fMeal').value, [$('fLocation').value.trim(), ...extraPlaces().map((q) => q.name).filter(Boolean)].join(' + '), $('fCity').value.trim()].filter(Boolean).join(' · ') || 'Datum und Location' },
     3: { done: !!(host && form.guests.length && occ), sum: [host?.name, form.guests.length ? `${form.guests.length} ${form.guests.length === 1 ? 'Gast' : 'Gäste'}` : '', occ].filter(Boolean).join(' · ') || 'Gastgeber, Gäste, Anlass' },
     4: { done: c.gross > 0, sum: c.gross ? `${eur.format(c.gross)} brutto` : 'Beträge prüfen' },
     5: { done: !!form.signature, sum: form.signature ? `unterschrieben${$('fSignPlace').value ? ', ' + $('fSignPlace').value : ''}` : 'optional, sonst von Hand' },

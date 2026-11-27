@@ -134,6 +134,17 @@
         <label>Ort<input id="f2City" autocomplete="off"></label>
       </div>
     </div>
+    <button type="button" class="ghost small loc2-add" id="btnLoc3Add">+ 3. Location hinzufügen</button>
+    <div class="loc2" id="loc3Box" hidden>
+      <div class="loc2-head"><b>3. Location</b><button type="button" class="ghost small danger" id="btnLoc3Del">Entfernen</button></div>
+      <p class="hint">Die Beträge aller Locations werden über die Belege zusammengerechnet.</p>
+      <label>Location<input id="f3Location" autocomplete="off" list="placeNames" placeholder="Location wählen oder neu eintippen"></label>
+            <label>Straße, Hausnummer<input id="f3Street" autocomplete="off"></label>
+      <div class="grid g2">
+        <label>PLZ<input id="f3Zip" autocomplete="off" inputmode="numeric"></label>
+        <label>Ort<input id="f3City" autocomplete="off"></label>
+      </div>
+    </div>
       <div class="step-next"><button type="button" class="primary" data-next="3">Weiter</button></div>
     </div>
   </section>
@@ -290,7 +301,7 @@
     </div>
     <p class="status" id="delYearStatus"></p>
   </section>
-  <p class="hint app-version">App-Version 27 · Mehrere Belege, Zuschneiden, Schwarz-Weiß, 2. Location</p>
+  <p class="hint app-version">App-Version 28 · Mehrere Belege, Zuschneiden, Schwarz-Weiß, 2. und 3. Location</p>
 </div>
 </main>
 

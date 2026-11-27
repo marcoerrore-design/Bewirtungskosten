@@ -362,6 +362,6 @@ button.all-emp { margin-top: 8px; width: 100%; }
 .li-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .stamm button.move { padding: 4px 8px; font-size: 12px; min-height: 32px; white-space: nowrap; }
 .app-version { text-align: center; margin: 18px 0 8px; }
-.loc2-add { margin-top: 12px; }
+.loc2-add { margin-top: 12px; display: block; }
 .loc2 { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .loc2-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
